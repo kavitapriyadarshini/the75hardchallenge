@@ -94,7 +94,7 @@ export default function Signup() {
   return (
     <div className="auth-page">
       <div className="auth-card">
-        <p className="auth-brand">75 Hard</p>
+        <p className="auth-brand">THE 75 CHALLENGE</p>
         <h1 className="auth-title">Create account</h1>
         <p className="auth-sub">
           Pick a username and password. We use a private sign-in address behind

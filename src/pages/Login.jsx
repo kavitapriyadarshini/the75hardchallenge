@@ -94,7 +94,7 @@ export default function Login() {
   return (
     <div className="auth-page">
       <div className="auth-card">
-        <p className="auth-brand">75 Hard</p>
+        <p className="auth-brand">THE 75 CHALLENGE</p>
         <h1 className="auth-title">Welcome back</h1>
         <p className="auth-sub">Sign in with your username and password.</p>
 
