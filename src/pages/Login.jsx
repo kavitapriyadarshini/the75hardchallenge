@@ -3,6 +3,11 @@ import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import './auth-forms.css'
 
+function challengeTypeLooksValid(raw) {
+  const t = String(raw ?? '').toLowerCase().trim()
+  return t === '75hard' || t === '75soft'
+}
+
 function usernameToFakeEmail(raw) {
   return `${raw.trim().toLowerCase()}@75hard.app`
 }
@@ -63,7 +68,7 @@ export default function Login() {
 
       const { data: profile, error: profileError } = await supabase
         .from('user_profiles')
-        .select('id')
+        .select('id, challenge_type')
         .eq('user_id', user.id)
         .maybeSingle()
 
@@ -72,11 +77,15 @@ export default function Login() {
         return
       }
 
-      if (profile) {
-        navigate('/dashboard', { replace: true })
-      } else {
-        navigate('/onboarding', { replace: true })
+      if (!profile) {
+        navigate('/challenge-select', { replace: true })
+        return
       }
+      if (!challengeTypeLooksValid(profile.challenge_type)) {
+        navigate('/challenge-select', { replace: true })
+        return
+      }
+      navigate('/dashboard', { replace: true })
     } finally {
       setLoading(false)
     }

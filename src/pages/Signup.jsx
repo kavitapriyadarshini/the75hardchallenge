@@ -79,7 +79,7 @@ export default function Signup() {
       }
 
       if (data.session) {
-        navigate('/onboarding', { replace: true })
+        navigate('/challenge-select', { replace: true })
         return
       }
 

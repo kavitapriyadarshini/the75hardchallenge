@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { MACRO_CALC } from '../lib/constants'
+import {
+  CHALLENGE_75_HARD,
+  CHALLENGE_75_SOFT,
+  normalizeChallengeType,
+  is75Soft,
+} from '../lib/challenge'
 import './onboarding.css'
 
 const DIET_OPTIONS = [
@@ -71,6 +77,12 @@ function parseMetricBody(
 
 export default function Onboarding() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const challengeType = useMemo(
+    () => normalizeChallengeType(location.state?.challengeType ?? CHALLENGE_75_HARD),
+    [location.state?.challengeType]
+  )
+
   const [authReady, setAuthReady] = useState(false)
   const [user, setUser] = useState(null)
 
@@ -211,9 +223,11 @@ export default function Onboarding() {
       heightFt,
       heightIn
     )
+    const soft = is75Soft(challengeType)
     const macros = {
       ...macroPreview,
-      waterLiters: 3.7,
+      waterLiters: soft ? 3 : 3.7,
+      waterMl: soft ? 3000 : 3700,
     }
     const row = {
       user_id: user.id,
@@ -224,6 +238,7 @@ export default function Onboarding() {
       diet_type: dietType,
       restrictions: restrictions.length ? restrictions : [],
       start_date: startDate,
+      challenge_type: soft ? CHALLENGE_75_SOFT : CHALLENGE_75_HARD,
       macros,
     }
     const { error: saveError } = await supabase
@@ -286,6 +301,11 @@ export default function Onboarding() {
       </header>
 
       <main className="onboarding-main">
+        <p className="onboarding-setup-tag">
+          {is75Soft(challengeType)
+            ? 'Setting up your 75 SOFT journey'
+            : 'Setting up your 75 HARD journey'}
+        </p>
         {step === 1 && (
           <>
             <h1 className="onboarding-title">Your preferences</h1>
@@ -556,7 +576,7 @@ export default function Onboarding() {
                   </div>
                   <div className="onboarding-macro-card onboarding-macro-card--wide">
                     <p className="onboarding-macro-label">Water</p>
-                    <p className="onboarding-macro-value">3.7</p>
+                    <p className="onboarding-macro-value">{is75Soft(challengeType) ? '3.0' : '3.7'}</p>
                     <span className="onboarding-macro-unit"> L / day (target)</span>
                   </div>
                 </div>

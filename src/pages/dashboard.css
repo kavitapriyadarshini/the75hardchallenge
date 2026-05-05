@@ -42,7 +42,14 @@
   font-weight: 700;
   letter-spacing: 0.14em;
   text-transform: uppercase;
+}
+
+.dash-logo--hard {
   color: #e07b39;
+}
+
+.dash-logo--soft {
+  color: #6abf5e;
 }
 
 .dash-logout {
@@ -209,6 +216,12 @@
   font-weight: 600;
   color: #fafafa;
   margin: 0;
+}
+
+.dash-inline-note {
+  font-size: 11px;
+  font-weight: 500;
+  color: #8a8a8a;
 }
 
 .dash-check-sub {
@@ -1015,6 +1028,15 @@
   margin-bottom: 0.55rem;
 }
 
+.dash-meal-dirty-alert--soft {
+  background: rgba(45, 106, 79, 0.22);
+  border-color: rgba(106, 191, 94, 0.45);
+}
+
+.dash-meal-dirty-alert--soft .dash-meal-dirty-title {
+  color: #b8f2d0;
+}
+
 .dash-meal-dirty-title {
   font-size: 0.82rem;
   color: #fecaca;
@@ -1759,6 +1781,17 @@
   opacity: 0.55;
 }
 
+.dash-grid-cell--partial {
+  background: rgba(212, 167, 52, 0.28);
+  border-color: #6a5a28;
+}
+
+.dash-grid-cell--empty {
+  background: #1e1e1e;
+  border-color: #303030;
+  opacity: 0.75;
+}
+
 .dash-grid-cell--today {
   box-shadow: inset 0 0 0 2px #e07b39;
 }
@@ -1824,7 +1857,7 @@
   backdrop-filter: blur(10px);
   border-top: 1px solid #2a2a2a;
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   padding: 0.35rem 0.25rem calc(0.35rem + env(safe-area-inset-bottom, 0px));
   z-index: 20;
   box-sizing: border-box;
@@ -2088,6 +2121,24 @@
 .dash-restart-cta:disabled {
   opacity: 0.65;
   cursor: not-allowed;
+}
+
+.dash-restart-actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  align-items: stretch;
+}
+
+.dash-restart-actions-row .dash-meal-dirty-dismiss {
+  flex: 1;
+  min-width: 0;
+}
+
+.dash-restart-actions-row .dash-restart-cta {
+  flex: 1;
+  margin-top: 0;
+  min-width: 0;
 }
 
 .dash-meals-entry-row {
@@ -2579,6 +2630,11 @@
   font-weight: 600;
 }
 
+.dash-check-sub--warn-muted {
+  color: #d6a867;
+  font-weight: 500;
+}
+
 .dash-sheet-overlay {
   position: fixed;
   inset: 0;
@@ -2957,6 +3013,135 @@
   font-size: 0.78rem;
   color: #e07b39;
   margin: 0;
+}
+
+.dash-workout-recovery-top {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.45rem;
+  margin-bottom: 0.85rem;
+}
+
+.dash-workout-recovery-hint {
+  margin: 0;
+  font-size: 0.78rem;
+}
+
+.dash-soft-celebrate {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 1rem 1rem 1.1rem;
+  margin-bottom: 1rem;
+  border-radius: 12px;
+  border: 1px solid #2d6a4f;
+  background: linear-gradient(135deg, rgba(19, 42, 31, 0.95) 0%, rgba(30, 58, 42, 0.88) 100%);
+}
+
+.dash-soft-celebrate-text {
+  margin: 0 0 0.75rem;
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: #d8f5e4;
+  line-height: 1.45;
+}
+
+.dash-soft-celebrate-btn {
+  width: 100%;
+  font-family: inherit;
+  font-size: 0.92rem;
+  font-weight: 700;
+  padding: 0.65rem 1rem;
+  border-radius: 10px;
+  border: 1px solid #6abf5e;
+  background: rgba(106, 191, 94, 0.22);
+  color: #e8fde3;
+  cursor: pointer;
+}
+
+.dash-soft-celebrate-btn:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.dash-soft-celebrate-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.dash-profile-card {
+  margin-top: 0.75rem;
+  padding: 1rem 1rem 1.15rem;
+  border-radius: 12px;
+  border: 1px solid #333;
+  background: #161616;
+}
+
+.dash-profile-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid #2a2a2a;
+}
+
+.dash-profile-row:last-of-type {
+  border-bottom: none;
+}
+
+.dash-profile-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #888;
+}
+
+.dash-profile-value {
+  font-size: 0.9rem;
+  color: #eaeaea;
+  text-align: right;
+}
+
+.dash-challenge-badge {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  padding: 0.35rem 0.55rem;
+  border-radius: 6px;
+}
+
+.dash-challenge-badge--hard {
+  background: rgba(224, 123, 57, 0.2);
+  border: 1px solid rgba(224, 123, 57, 0.55);
+  color: #ffb37a;
+}
+
+.dash-challenge-badge--soft {
+  background: rgba(106, 191, 94, 0.18);
+  border: 1px solid rgba(106, 191, 94, 0.55);
+  color: #a8e89c;
+}
+
+.dash-profile-switch-link {
+  display: block;
+  width: 100%;
+  margin-top: 1rem;
+  padding: 0.6rem;
+  font-family: inherit;
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: #93c5fd;
+  background: transparent;
+  border: 1px dashed #3d4f66;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.dash-profile-switch-link:hover {
+  border-color: #64748b;
+  color: #bfdbfe;
 }
 
 @media (max-width: 360px) {

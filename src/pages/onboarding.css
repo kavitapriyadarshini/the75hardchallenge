@@ -76,6 +76,15 @@
   box-sizing: border-box;
 }
 
+.onboarding-setup-tag {
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #888;
+  margin: 0 0 1rem;
+}
+
 .onboarding-title {
   font-size: 1.35rem;
   font-weight: 600;

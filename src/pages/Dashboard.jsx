@@ -9,19 +9,30 @@ import {
   composeMealPlanFromAlternatives,
   mealTiersForDiet,
 } from '../lib/constants'
+import {
+  CHALLENGE_75_HARD,
+  CHALLENGE_75_SOFT,
+  normalizeChallengeType,
+  isChallengeTypeExplicitlySet,
+  is75Soft,
+  waterTargetMl,
+  waterLitersLabel,
+  challengeTaskCount,
+  workout1Done,
+  workout2Done,
+  workout1Type,
+  workout2Type,
+  workoutRuleViolated,
+  isWaterDone,
+  isPerfectLog,
+  missedRequirementLabels,
+  taskBreakdownLine,
+  waterMilestoneMessage,
+  summarizeAttemptThrough,
+  dayFailsHardRules,
+  recoveryDayUsedElsewhereInWeek,
+} from '../lib/challenge'
 import './dashboard.css'
-
-const WATER_TARGET = 3700
-
-function waterMilestoneMessage(ml) {
-  const m = Math.max(0, Number(ml) || 0)
-  if (m <= 0) return 'Log sips as you go — small amounts add up.'
-  if (m < 1000) return 'Good start — keep a bottle nearby.'
-  if (m < WATER_TARGET * 0.45) return 'Almost halfway to today’s target.'
-  if (m < WATER_TARGET * 0.75) return 'Past halfway — steady wins.'
-  if (m < WATER_TARGET) return 'Close to 3.7L — finish strong.'
-  return 'Daily water target reached.'
-}
 
 const CHALLENGE_DAYS = 75
 const EMPTY_MACROS_FALLBACK = Object.freeze({})
@@ -361,38 +372,6 @@ function formatLocalDate(d) {
   return `${y}-${m}-${day}`
 }
 
-function isWaterDone(log) {
-  return (log?.water_ml ?? 0) >= WATER_TARGET
-}
-
-function workout1Done(log) {
-  return !!(log?.workout_1_done ?? log?.indoor_done)
-}
-
-function workout2Done(log) {
-  return !!(log?.workout_2_done ?? log?.outdoor_done)
-}
-
-function workout1Type(log) {
-  return log?.workout_1_type ?? log?.indoor_workout_type ?? null
-}
-
-function workout2Type(log) {
-  return log?.workout_2_type ?? log?.outdoor_workout_type ?? null
-}
-
-function isPerfectLog(log) {
-  if (!log) return false
-  return !!(
-    log.diet_done &&
-    workout1Done(log) &&
-    workout2Done(log) &&
-    log.reading_done &&
-    log.photo_done &&
-    isWaterDone(log)
-  )
-}
-
 function challengeDayNumber(startDateStr, todayStr) {
   const start = parseISODateLocal(startDateStr)
   const today = parseISODateLocal(todayStr)
@@ -404,21 +383,6 @@ function typeBadgeClass(type) {
   if (type === 'cardio') return 'dash-type-badge dash-type-cardio'
   if (type === 'strength') return 'dash-type-badge dash-type-strength'
   return 'dash-type-badge dash-type-flex'
-}
-
-function taskBreakdownLine(log) {
-  if (!log) return 'No log'
-  const parts = [
-    log.diet_done ? 'Clean diet ✓' : 'Clean diet —',
-    workout1Done(log) ? 'Workout 1 ✓' : 'Workout 1 —',
-    workout2Done(log) ? 'Workout 2 ✓' : 'Workout 2 —',
-    log.reading_done ? 'Read ✓' : 'Read —',
-    log.photo_done ? 'Photo ✓' : 'Photo —',
-    isWaterDone(log)
-      ? 'Water ✓'
-      : `Water ${log.water_ml ?? 0}/${WATER_TARGET} ml`,
-  ]
-  return parts.join(' · ')
 }
 
 async function imageFileToJpegDataUrl(file, maxDim = 1280, quality = 0.82) {
@@ -477,58 +441,14 @@ function emptyDayLog(date) {
     progress_photo: null,
     reading_log: null,
     workout_voice: null,
+    is_recovery_day: false,
   }
-}
-
-function dayFailed75Hard(log) {
-  if (!log) return true
-  return (
-    !log.diet_done ||
-    !workout1Done(log) ||
-    !workout2Done(log) ||
-    !log.reading_done ||
-    !log.photo_done ||
-    (log.water_ml ?? 0) < WATER_TARGET
-  )
-}
-
-function missedRequirementLabels(log) {
-  if (!log) return ['No daily log recorded']
-  const m = []
-  if (!log.diet_done) m.push('Clean diet')
-  if (!workout1Done(log)) m.push('Workout 1 (45 min)')
-  if (!workout2Done(log)) m.push('Workout 2 (45 min)')
-  if (!log.reading_done) m.push('Reading (10 pages)')
-  if (!log.photo_done) m.push('Progress photo')
-  if ((log.water_ml ?? 0) < WATER_TARGET) {
-    m.push(`Water (logged ${log.water_ml ?? 0} ml, need ${WATER_TARGET} ml)`)
-  }
-  return m.length ? m : ['Incomplete day']
 }
 
 function attemptAgeDays(startDateStr, refDateStr) {
   const a = parseISODateLocal(startDateStr)
   const b = parseISODateLocal(refDateStr)
   return Math.round((b - a) / 86400000)
-}
-
-function summarizeAttemptThrough(activeAttempt, throughDateStr, logsByDateMap) {
-  if (!activeAttempt) return null
-  const start = activeAttempt.start_date
-  const through = minDateStr(throughDateStr, addDaysISO(start, 74))
-  let perfect = 0
-  for (let i = 0; i < CHALLENGE_DAYS; i += 1) {
-    const d = parseISODateLocal(start)
-    d.setDate(d.getDate() + i)
-    const key = formatLocalDate(d)
-    if (key > through) break
-    const log = logsByDateMap.get(key)
-    if (log && isPerfectLog(log)) perfect += 1
-  }
-  return {
-    dayReached: challengeDayNumber(start, through),
-    perfectDays: perfect,
-  }
 }
 
 function formatLongDate(iso) {
@@ -975,6 +895,8 @@ export default function Dashboard() {
   const [progressAttemptId, setProgressAttemptId] = useState(null)
   const [restartFailureModal, setRestartFailureModal] = useState(null)
   const [restartBusy, setRestartBusy] = useState(false)
+  const [challengeSwitchOpen, setChallengeSwitchOpen] = useState(false)
+  const [challengeSwitchBusy, setChallengeSwitchBusy] = useState(false)
   const [mealPlanRequest, setMealPlanRequest] = useState('')
   const [mealPlanOutput, setMealPlanOutput] = useState('')
   const [mealPlanGenerating, setMealPlanGenerating] = useState(false)
@@ -1063,6 +985,15 @@ export default function Dashboard() {
 
   const startDateStr = profile?.start_date ?? todayStr
 
+  const challengeType = useMemo(
+    () => normalizeChallengeType(profile?.challenge_type),
+    [profile?.challenge_type]
+  )
+  const challengeHeaderLabel = is75Soft(challengeType) ? '75 SOFT' : '75 HARD'
+  const challengeHeaderClass = is75Soft(challengeType) ? 'dash-logo--soft' : 'dash-logo--hard'
+  const waterTarget = useMemo(() => waterTargetMl(challengeType), [challengeType])
+  const taskSegments = useMemo(() => challengeTaskCount(challengeType), [challengeType])
+
   const calendarToday = todayLocalISO()
   const displayLog = useMemo(() => {
     if (viewDate === calendarToday) return todayLog
@@ -1072,6 +1003,14 @@ export default function Dashboard() {
   const dayOf75View = useMemo(
     () => challengeDayNumber(startDateStr, viewDate),
     [startDateStr, viewDate]
+  )
+
+  const showSoft75CompleteBanner = useMemo(
+    () =>
+      is75Soft(challengeType) &&
+      !progressAttemptId &&
+      challengeDayNumber(startDateStr, calendarToday) >= CHALLENGE_DAYS,
+    [challengeType, progressAttemptId, startDateStr, calendarToday]
   )
 
   const arcRadius = 54
@@ -1125,7 +1064,7 @@ export default function Dashboard() {
     let daysCompleted = 0
     for (const log of allLogs) {
       if (!log?.date || log.date < start || log.date > through) continue
-      if (isPerfectLog(log)) daysCompleted += 1
+      if (isPerfectLog(log, challengeType)) daysCompleted += 1
     }
     if (a.ended_at) {
       return {
@@ -1142,7 +1081,7 @@ export default function Dashboard() {
       start,
       daysCompleted,
     }
-  }, [progressScopedAttempt, allLogs])
+  }, [progressScopedAttempt, allLogs, challengeType])
 
   const progressGridDays = useMemo(() => {
     const ct = todayLocalISO()
@@ -1159,8 +1098,18 @@ export default function Dashboard() {
       const key = formatLocalDate(dt)
       const log = logsByDate.get(key)
       const isToday = !isProgressHistoryView && showTodayBorder && key === ct
-      const gridKind =
-        key > through ? 'future' : log && isPerfectLog(log) ? 'perfect' : 'failed'
+      let gridKind = 'future'
+      if (key <= through) {
+        if (is75Soft(challengeType)) {
+          if (!log) gridKind = 'empty'
+          else if (isPerfectLog(log, challengeType)) gridKind = 'perfect'
+          else gridKind = 'partial'
+        } else if (log && isPerfectLog(log, challengeType)) {
+          gridKind = 'perfect'
+        } else {
+          gridKind = 'failed'
+        }
+      }
       cells.push({
         key,
         log,
@@ -1170,7 +1119,7 @@ export default function Dashboard() {
       })
     }
     return cells
-  }, [progressScopedAttempt, logsByDate, startDateStr, isProgressHistoryView])
+  }, [progressScopedAttempt, logsByDate, startDateStr, isProgressHistoryView, challengeType])
 
   const progressRecent7 = useMemo(() => {
     const start = progressScopedAttempt?.start_date ?? startDateStr
@@ -1285,23 +1234,29 @@ export default function Dashboard() {
       return
     }
     if (!prof) {
-      navigate('/onboarding', { replace: true })
+      navigate('/challenge-select', { replace: true })
       return
     }
+    if (!isChallengeTypeExplicitlySet(prof.challenge_type)) {
+      navigate('/challenge-select', { replace: true })
+      return
+    }
+    const ctLoad = normalizeChallengeType(prof.challenge_type)
     let nextProfile = prof
     const recalculatedMacros = (() => {
       const w = Number(prof.weight_kg)
       const h = Number(prof.height_cm)
       if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) return null
       const calc = MACRO_CALC(w, h, prof.gender)
+      const soft = is75Soft(ctLoad)
       return {
         calories: calc.calories,
         protein: calc.protein,
         carbs: calc.carbs,
         fat: calc.fat,
         fiber: calc.fiber,
-        waterLiters: 3.7,
-        waterMl: 3700,
+        waterLiters: soft ? 3 : 3.7,
+        waterMl: soft ? 3000 : 3700,
       }
     })()
     if (recalculatedMacros) {
@@ -1334,6 +1289,7 @@ export default function Dashboard() {
       .from('attempts')
       .select('*')
       .eq('user_id', uid)
+      .eq('challenge_type', ctLoad)
       .order('attempt_number', { ascending: true })
 
     if (!attErr && (!attRows || attRows.length === 0)) {
@@ -1341,12 +1297,14 @@ export default function Dashboard() {
         user_id: uid,
         attempt_number: 1,
         start_date: prof.start_date ?? t,
+        challenge_type: ctLoad,
       })
       if (!ins.error) {
         const again = await supabase
           .from('attempts')
           .select('*')
           .eq('user_id', uid)
+          .eq('challenge_type', ctLoad)
           .order('attempt_number', { ascending: true })
         attRows = again.data
       }
@@ -1405,10 +1363,10 @@ export default function Dashboard() {
         const map = new Map((logsData ?? []).map((r) => [r.date, r]))
         const yLog = map.get(yest)
         const age = attemptAgeDays(activeOnly.start_date, t)
-        const failedYesterday = yLog ? dayFailed75Hard(yLog) : age > 1
+        const failedYesterday = dayFailsHardRules(yLog, age, ctLoad)
         if (failedYesterday) {
-          const missedLabels = yLog ? missedRequirementLabels(yLog) : ['No daily log recorded']
-          const prevStats = summarizeAttemptThrough(activeOnly, yest, map)
+          const missedLabels = yLog ? missedRequirementLabels(yLog, ctLoad) : ['No daily log recorded']
+          const prevStats = summarizeAttemptThrough(activeOnly, yest, map, ctLoad)
           const nums = (attRows ?? []).map((a) => a.attempt_number)
           const nextNum = (nums.length ? Math.max(...nums) : 0) + 1
           setRestartFailureModal({
@@ -1536,40 +1494,60 @@ export default function Dashboard() {
     await persistLogPatch({ water_ml: Math.max(0, current - ml) })
   }
 
-  const executeChallengeRestart = useCallback(async () => {
-    const uid = userIdRef.current
-    if (!uid) return { ok: false, message: 'Not signed in.', nextNum: null }
-    const active = attempts.find((a) => !a.ended_at)
-    if (!active) return { ok: false, message: 'No active attempt.', nextNum: null }
-    const nums = attempts.map((a) => a.attempt_number)
-    const nextNum = (nums.length ? Math.max(...nums) : 0) + 1
-    const y = addDaysISO(todayLocalISO(), -1)
-    const t0 = todayLocalISO()
-    const { error: e1 } = await supabase
-      .from('attempts')
-      .update({ ended_at: y })
-      .eq('id', active.id)
-    if (e1) return { ok: false, message: e1.message || 'Could not end current attempt.', nextNum: null }
-    const { error: e2 } = await supabase.from('attempts').insert({
-      user_id: uid,
-      attempt_number: nextNum,
-      start_date: t0,
-    })
-    if (e2) return { ok: false, message: e2.message || 'Could not start new attempt.', nextNum: null }
-    const { error: e3 } = await supabase
-      .from('user_profiles')
-      .update({ start_date: t0 })
-      .eq('user_id', uid)
-    if (e3) return { ok: false, message: e3.message || 'Could not update profile start date.', nextNum: null }
-    setProgressAttemptId(null)
-    await load()
-    return { ok: true, message: '', nextNum }
-  }, [attempts, load])
+  const executeChallengeRestart = useCallback(
+    async (profileExtras = {}) => {
+      const uid = userIdRef.current
+      if (!uid) return { ok: false, message: 'Not signed in.', nextNum: null }
+      const active = attempts.find((a) => !a.ended_at)
+      if (!active) return { ok: false, message: 'No active attempt.', nextNum: null }
+      const nextChallengeType = normalizeChallengeType(profileExtras.challenge_type ?? challengeType)
+      let nums = attempts.map((a) => a.attempt_number)
+      if (nextChallengeType !== challengeType) {
+        const { data: nextTypeAttempts, error: nextTypeAttemptsErr } = await supabase
+          .from('attempts')
+          .select('attempt_number')
+          .eq('user_id', uid)
+          .eq('challenge_type', nextChallengeType)
+        if (nextTypeAttemptsErr) {
+          return {
+            ok: false,
+            message: nextTypeAttemptsErr.message || 'Could not read attempts for selected challenge.',
+            nextNum: null,
+          }
+        }
+        nums = (nextTypeAttempts ?? []).map((a) => a.attempt_number)
+      }
+      const nextNum = (nums.length ? Math.max(...nums) : 0) + 1
+      const y = addDaysISO(todayLocalISO(), -1)
+      const t0 = todayLocalISO()
+      const { error: e1 } = await supabase
+        .from('attempts')
+        .update({ ended_at: y })
+        .eq('id', active.id)
+      if (e1) return { ok: false, message: e1.message || 'Could not end current attempt.', nextNum: null }
+      const { error: e2 } = await supabase.from('attempts').insert({
+        user_id: uid,
+        attempt_number: nextNum,
+        start_date: t0,
+        challenge_type: nextChallengeType,
+      })
+      if (e2) return { ok: false, message: e2.message || 'Could not start new attempt.', nextNum: null }
+      const { error: e3 } = await supabase
+        .from('user_profiles')
+        .update({ start_date: t0, ...profileExtras })
+        .eq('user_id', uid)
+      if (e3) return { ok: false, message: e3.message || 'Could not update profile.', nextNum: null }
+      setProgressAttemptId(null)
+      await load()
+      return { ok: true, message: '', nextNum }
+    },
+    [attempts, challengeType, load]
+  )
 
   const performRestartAttempt = useCallback(async () => {
     setRestartBusy(true)
     setLoadError('')
-    const res = await executeChallengeRestart()
+    const res = await executeChallengeRestart({})
     setRestartBusy(false)
     if (!res.ok) {
       setLoadError(res.message)
@@ -1577,6 +1555,45 @@ export default function Dashboard() {
     }
     setRestartFailureModal(null)
   }, [executeChallengeRestart])
+
+  const handleUpgradeTo75HardFromSoftBanner = async () => {
+    setChallengeSwitchBusy(true)
+    setLoadError('')
+    const res = await executeChallengeRestart({
+      challenge_type: CHALLENGE_75_HARD,
+      challenge_completed_at: null,
+    })
+    setChallengeSwitchBusy(false)
+    if (!res.ok) {
+      setLoadError(res.message)
+      return
+    }
+    setTab('today')
+    setAttemptBannerMessage('Welcome to 75 HARD — fresh attempt started today.')
+  }
+
+  const confirmSwitchChallenge = async () => {
+    setChallengeSwitchBusy(true)
+    setLoadError('')
+    const next =
+      challengeType === CHALLENGE_75_SOFT ? CHALLENGE_75_HARD : CHALLENGE_75_SOFT
+    const res = await executeChallengeRestart({
+      challenge_type: next,
+      challenge_completed_at: null,
+    })
+    setChallengeSwitchBusy(false)
+    setChallengeSwitchOpen(false)
+    if (!res.ok) {
+      setLoadError(res.message)
+      return
+    }
+    setTab('today')
+    setAttemptBannerMessage(
+      next === CHALLENGE_75_HARD
+        ? 'Switched to 75 HARD — new attempt from today.'
+        : 'Switched to 75 Soft — new attempt from today.'
+    )
+  }
 
   const logWorkoutToSlot = async (slot, workoutName, locationType, opts = {}) => {
     if (viewDateRef.current !== todayLocalISO()) return
@@ -1941,7 +1958,9 @@ export default function Dashboard() {
     const slot = mealElseSlotsRef.current[slotIndex]
     const analysis = slot?.result
     const draft = (slot?.draft ?? '').trim()
-    if (!analysis?.is_clean_diet || !draft) return
+    const soft = is75Soft(normalizeChallengeType(profile?.challenge_type))
+    if (!analysis || !draft) return
+    if (!soft && !analysis.is_clean_diet) return
     setMealElseSlots((prev) => {
       const n = [...prev]
       n[slotIndex] = { ...n[slotIndex], logging: true }
@@ -1956,7 +1975,7 @@ export default function Dashboard() {
       carbs_g: analysis.carbs_g,
       fat_g: analysis.fat_g,
       fiber_g: analysis.fiber_g,
-      is_clean: true,
+      is_clean: !!analysis.is_clean_diet,
       logged_at: new Date().toISOString(),
       source: slot?.mode === 'edited' ? 'edited' : 'custom',
       modified_from_suggestion: !!slot?.modifiedFromSuggestion,
@@ -2020,7 +2039,7 @@ export default function Dashboard() {
   const restartChallengeFromMeals = async () => {
     setMealElseRestartBusy(true)
     setLoadError('')
-    const res = await executeChallengeRestart()
+    const res = await executeChallengeRestart({})
     setMealElseRestartBusy(false)
     if (!res.ok) {
       setLoadError(res.message)
@@ -2100,24 +2119,33 @@ export default function Dashboard() {
 
   const todayTaskDoneCount = useMemo(() => {
     if (!displayLog) return 0
+    if (is75Soft(challengeType)) {
+      let count = 0
+      if (displayLog.diet_done) count += 1
+      if (workout1Done(displayLog)) count += 1
+      if (displayLog.reading_done) count += 1
+      if (isWaterDone(displayLog, challengeType)) count += 1
+      if (displayLog.is_recovery_day) count += 1
+      return count
+    }
     const indoorType = String(workout1.type || 'indoor')
     const outdoorType = String(workout2.type || 'outdoor')
-    const workoutRuleFail =
+    const wFail =
       !!workout1.done &&
       !!workout2.done &&
       indoorType === 'indoor' &&
       outdoorType === 'indoor'
     let count = 0
     if (displayLog.diet_done) count += 1
-    if (workout1.done && !workoutRuleFail) count += 1
-    if (workout2.done && !workoutRuleFail) count += 1
+    if (workout1.done && !wFail) count += 1
+    if (workout2.done && !wFail) count += 1
     if (displayLog.reading_done) count += 1
     if (displayLog.photo_done) count += 1
-    if (isWaterDone(displayLog)) count += 1
+    if (isWaterDone(displayLog, challengeType)) count += 1
     return count
-  }, [displayLog, workout1, workout2])
+  }, [displayLog, workout1, workout2, challengeType])
 
-  const todayTaskProgressPct = Math.round((todayTaskDoneCount / 6) * 100)
+  const todayTaskProgressPct = Math.round((todayTaskDoneCount / Math.max(1, taskSegments)) * 100)
 
   const cleanDietSubtitle = useMemo(() => {
     if (todayMealsLogged <= 0) return 'Tap › to log your meals'
@@ -2138,23 +2166,59 @@ export default function Dashboard() {
   }, [displayLog?.reading_log])
 
   const workoutRuleFail = useMemo(() => {
-    const indoorType = String(workout1.type || 'indoor')
-    const outdoorType = String(workout2.type || 'outdoor')
-    return (
-      !!workout1.done &&
-      !!workout2.done &&
-      indoorType === 'indoor' &&
-      outdoorType === 'indoor'
-    )
-  }, [workout1, workout2])
+    if (is75Soft(challengeType)) return false
+    return workoutRuleViolated(displayLog)
+  }, [displayLog, challengeType])
 
   const ringMotivation = useMemo(() => {
+    if (is75Soft(challengeType)) {
+      if (todayTaskDoneCount === 0) return "Gentle start — one task at a time. You've got this."
+      if (todayTaskDoneCount <= 2) return 'Nice momentum — keep it kind and steady.'
+      if (todayTaskDoneCount === 3) return 'Halfway there — proud of you for showing up.'
+      if (todayTaskDoneCount < taskSegments)
+        return 'Almost wrapped — finish on your terms, no pressure.'
+      return 'Beautiful consistency today — habits are sticking.'
+    }
     if (todayTaskDoneCount === 0) return "Every champion starts here. Let's go. 🔥"
     if (todayTaskDoneCount <= 2) return 'Good start — keep building momentum'
     if (todayTaskDoneCount === 3) return "Halfway through the day. Don't stop now 💪"
     if (todayTaskDoneCount <= 5) return 'Almost there — finish what you started!'
     return 'PERFECT DAY! You crushed it 🏆'
-  }, [todayTaskDoneCount])
+  }, [todayTaskDoneCount, challengeType, taskSegments])
+
+  const recoveryWeekBlocked = useMemo(() => {
+    if (!is75Soft(challengeType) || viewDate !== calendarToday || !todayLog?.date) return false
+    if (todayLog?.is_recovery_day) return false
+    return recoveryDayUsedElsewhereInWeek(allLogs, calendarToday, todayLog.date)
+  }, [challengeType, viewDate, calendarToday, todayLog, allLogs])
+
+  const toggleRecoveryDay = async () => {
+    if (!is75Soft(challengeType)) return
+    if (viewDateRef.current !== todayLocalISO()) return
+    const cur = todayLogRef.current
+    if (!cur?.id) return
+    const turningOn = !cur.is_recovery_day
+    if (turningOn && recoveryWeekBlocked) return
+    if (turningOn) {
+      const { error } = await persistLogPatch({
+        is_recovery_day: true,
+        workout_1_done: true,
+        indoor_done: true,
+        workout_1_name: 'Active recovery',
+        workout_1_type: 'indoor',
+      })
+      if (error) setLoadError(error.message || 'Update failed')
+    } else {
+      const { error } = await persistLogPatch({
+        is_recovery_day: false,
+        workout_1_done: false,
+        indoor_done: false,
+        workout_1_name: null,
+        workout_1_type: null,
+      })
+      if (error) setLoadError(error.message || 'Update failed')
+    }
+  }
 
   useEffect(() => {
     if (viewDate !== calendarToday) return
@@ -2162,12 +2226,23 @@ export default function Dashboard() {
     if (!cur?.id) return
     const patch = {}
     if ((cur.actual_meals?.length ?? 0) >= 3 && !hasNonCleanMeal && !cur.diet_done) patch.diet_done = true
-    if (cur.progress_photo && !cur.photo_done) patch.photo_done = true
-    if ((cur.water_ml ?? 0) >= WATER_TARGET && !cur.water_done) patch.water_done = true
+    if (!is75Soft(challengeType) && cur.progress_photo && !cur.photo_done) patch.photo_done = true
+    const wt = waterTargetMl(challengeType)
+    if ((cur.water_ml ?? 0) >= wt && !cur.water_done) patch.water_done = true
     if (Object.keys(patch).length) {
       void persistLogPatch(patch)
     }
-  }, [viewDate, calendarToday, todayLog?.id, todayLog?.actual_meals, todayLog?.progress_photo, todayLog?.water_ml, hasNonCleanMeal, persistLogPatch])
+  }, [
+    viewDate,
+    calendarToday,
+    todayLog?.id,
+    todayLog?.actual_meals,
+    todayLog?.progress_photo,
+    todayLog?.water_ml,
+    hasNonCleanMeal,
+    persistLogPatch,
+    challengeType,
+  ])
 
   const loggedMealsBySlot = useMemo(() => {
     const map = new Map()
@@ -2298,7 +2373,7 @@ export default function Dashboard() {
     <div className="dashboard">
       <header className="dash-header">
         <div className="dash-header-inner">
-          <span className="dash-logo">75 Hard</span>
+          <span className={`dash-logo ${challengeHeaderClass}`}>{challengeHeaderLabel}</span>
           <button type="button" className="dash-logout" onClick={handleLogout}>
             Log out
           </button>
@@ -2331,7 +2406,10 @@ export default function Dashboard() {
             <p className="dash-muted dash-day-sub">of 75 · {formatLongDate(viewDate)}</p>
 
             <div className="dash-arc-wrap">
-              <div className="dash-arc" aria-label={`Today's progress ${todayTaskDoneCount} of 6 tasks`}>
+              <div
+                className="dash-arc"
+                aria-label={`Today's progress ${todayTaskDoneCount} of ${taskSegments} tasks`}
+              >
                 <svg width="160" height="160" viewBox="0 0 120 120">
                   <circle className="dash-arc-bg" cx="60" cy="60" r={arcRadius} />
                   <circle
@@ -2349,12 +2427,16 @@ export default function Dashboard() {
                 </div>
               </div>
             </div>
-            <p className={`dash-mission-motivation${todayTaskDoneCount === 6 ? ' dash-mission-motivation--perfect' : ''}`}>
+            <p
+              className={`dash-mission-motivation${todayTaskDoneCount >= taskSegments ? ' dash-mission-motivation--perfect' : ''}`}
+            >
               {ringMotivation}
             </p>
 
-            <div className={`dash-energy-bar${todayTaskDoneCount === 6 ? ' dash-energy-bar--full' : ''}`}>
-              {Array.from({ length: 6 }, (_, i) => (
+            <div
+              className={`dash-energy-bar${todayTaskDoneCount >= taskSegments ? ' dash-energy-bar--full' : ''}`}
+            >
+              {Array.from({ length: taskSegments }, (_, i) => (
                 <span
                   key={`seg-${i}`}
                   className={`dash-energy-seg${i < todayTaskDoneCount ? ' dash-energy-seg--on' : ''}`}
@@ -2371,7 +2453,9 @@ export default function Dashboard() {
                 >
                   <span className="dash-check-box" aria-hidden>{displayLog.diet_done ? '✓' : ''}</span>
                   <span className="dash-check-body">
-                    <p className="dash-check-title">Clean diet</p>
+                    <p className="dash-check-title">
+                      {is75Soft(challengeType) ? 'Eat well' : 'Clean diet'}
+                    </p>
                     <p className={`dash-check-sub ${todayMealsLogged > 0 ? 'dash-check-sub--good' : 'dash-check-sub--warn'}`}>
                       {cleanDietSubtitle}
                     </p>
@@ -2380,53 +2464,94 @@ export default function Dashboard() {
                 <button type="button" className="dash-check-jump" onClick={() => setTab('meals')}>›</button>
               </div>
 
-              <div className={`dash-mission-card${workout1.done && !workoutRuleFail ? ' dash-mission-card--done' : workout1.done ? ' dash-mission-card--partial' : ''}`}>
-                <button
-                  type="button"
-                  className={`dash-check dash-check--fill ${workout1.done && !workoutRuleFail ? 'dash-check--on' : ''}`}
-                  onClick={() => toggleBool('workout_1_done')}
-                >
-                  <span className="dash-check-box" aria-hidden>{workout1.done ? '✓' : ''}</span>
-                  <span className="dash-check-body">
-                    <p className="dash-check-title">
-                      Workout 1{' '}
-                      {workout1.type ? (
-                        <span className="dash-workout-type-badge">
-                          {String(workout1.type).toUpperCase()}
-                        </span>
-                      ) : null}
-                    </p>
-                    <p className={`dash-check-sub ${workout1.done && !workoutRuleFail ? 'dash-check-sub--good' : ''}`}>
-                      {workout1.done ? workout1.name || 'Logged ✓' : 'Tap › to log workout'}
-                    </p>
-                  </span>
-                </button>
-                <button type="button" className="dash-check-jump" onClick={() => setTab('workouts')}>›</button>
-              </div>
+              {is75Soft(challengeType) ? (
+                <div className={`dash-mission-card${workout1.done ? ' dash-mission-card--done' : ''}`}>
+                  <button
+                    type="button"
+                    className={`dash-check dash-check--fill ${workout1.done ? 'dash-check--on' : ''}`}
+                    onClick={() => toggleBool('workout_1_done')}
+                  >
+                    <span className="dash-check-box" aria-hidden>
+                      {workout1.done ? (displayLog.is_recovery_day ? '🧘' : '✓') : ''}
+                    </span>
+                    <span className="dash-check-body">
+                      <p className="dash-check-title">Workout · 45 min</p>
+                      <p className={`dash-check-sub ${workout1.done ? 'dash-check-sub--good' : ''}`}>
+                        {displayLog.is_recovery_day
+                          ? '🧘 Recovery day — light activity counts'
+                          : workout1.done
+                            ? workout1.name || 'Logged ✓'
+                            : 'Tap › to log workout'}
+                      </p>
+                    </span>
+                  </button>
+                  <button type="button" className="dash-check-jump" onClick={() => setTab('workouts')}>
+                    ›
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <div
+                    className={`dash-mission-card${workout1.done && !workoutRuleFail ? ' dash-mission-card--done' : workout1.done ? ' dash-mission-card--partial' : ''}`}
+                  >
+                    <button
+                      type="button"
+                      className={`dash-check dash-check--fill ${workout1.done && !workoutRuleFail ? 'dash-check--on' : ''}`}
+                      onClick={() => toggleBool('workout_1_done')}
+                    >
+                      <span className="dash-check-box" aria-hidden>{workout1.done ? '✓' : ''}</span>
+                      <span className="dash-check-body">
+                        <p className="dash-check-title">
+                          Workout 1{' '}
+                          {workout1.type ? (
+                            <span className="dash-workout-type-badge">
+                              {String(workout1.type).toUpperCase()}
+                            </span>
+                          ) : null}
+                        </p>
+                        <p
+                          className={`dash-check-sub ${workout1.done && !workoutRuleFail ? 'dash-check-sub--good' : ''}`}
+                        >
+                          {workout1.done ? workout1.name || 'Logged ✓' : 'Tap › to log workout'}
+                        </p>
+                      </span>
+                    </button>
+                    <button type="button" className="dash-check-jump" onClick={() => setTab('workouts')}>
+                      ›
+                    </button>
+                  </div>
 
-              <div className={`dash-mission-card${workout2.done && !workoutRuleFail ? ' dash-mission-card--done' : workout2.done ? ' dash-mission-card--partial' : ''}`}>
-                <button
-                  type="button"
-                  className={`dash-check dash-check--fill ${workout2.done && !workoutRuleFail ? 'dash-check--on' : ''}`}
-                  onClick={() => toggleBool('workout_2_done')}
-                >
-                  <span className="dash-check-box" aria-hidden>{workout2.done ? '✓' : ''}</span>
-                  <span className="dash-check-body">
-                    <p className="dash-check-title">
-                      Workout 2{' '}
-                      {workout2.type ? (
-                        <span className="dash-workout-type-badge">
-                          {String(workout2.type).toUpperCase()}
-                        </span>
-                      ) : null}
-                    </p>
-                    <p className={`dash-check-sub ${workout2.done && !workoutRuleFail ? 'dash-check-sub--good' : ''}`}>
-                      {workout2.done ? workout2.name || 'Logged ✓' : 'Tap › to log workout'}
-                    </p>
-                  </span>
-                </button>
-                <button type="button" className="dash-check-jump" onClick={() => setTab('workouts')}>›</button>
-              </div>
+                  <div
+                    className={`dash-mission-card${workout2.done && !workoutRuleFail ? ' dash-mission-card--done' : workout2.done ? ' dash-mission-card--partial' : ''}`}
+                  >
+                    <button
+                      type="button"
+                      className={`dash-check dash-check--fill ${workout2.done && !workoutRuleFail ? 'dash-check--on' : ''}`}
+                      onClick={() => toggleBool('workout_2_done')}
+                    >
+                      <span className="dash-check-box" aria-hidden>{workout2.done ? '✓' : ''}</span>
+                      <span className="dash-check-body">
+                        <p className="dash-check-title">
+                          Workout 2{' '}
+                          {workout2.type ? (
+                            <span className="dash-workout-type-badge">
+                              {String(workout2.type).toUpperCase()}
+                            </span>
+                          ) : null}
+                        </p>
+                        <p
+                          className={`dash-check-sub ${workout2.done && !workoutRuleFail ? 'dash-check-sub--good' : ''}`}
+                        >
+                          {workout2.done ? workout2.name || 'Logged ✓' : 'Tap › to log workout'}
+                        </p>
+                      </span>
+                    </button>
+                    <button type="button" className="dash-check-jump" onClick={() => setTab('workouts')}>
+                      ›
+                    </button>
+                  </div>
+                </>
+              )}
 
               <div className={`dash-mission-card${displayLog.reading_done ? ' dash-mission-card--done' : ''}`}>
                 <button
@@ -2464,45 +2589,55 @@ export default function Dashboard() {
                 <button type="button" className="dash-check-jump" onClick={() => setReadingModalOpen(true)}>›</button>
               </div>
 
-              <div className={`dash-mission-card${displayLog.photo_done ? ' dash-mission-card--done' : ''}`}>
-                <button
-                  type="button"
-                  className={`dash-check dash-check--fill ${displayLog.photo_done ? 'dash-check--on' : ''}`}
-                  onClick={() => toggleBool('photo_done')}
-                >
-                  <span className="dash-check-box" aria-hidden>{displayLog.photo_done ? '✓' : ''}</span>
-                  <span className="dash-check-body">
-                    <p className="dash-check-title">Progress photo</p>
-                    <p className={`dash-check-sub ${displayLog.progress_photo ? 'dash-check-sub--good' : 'dash-check-sub--warn'}`}>
-                      {displayLog.progress_photo ? 'Photo uploaded ✓' : 'Tap › to upload in Progress'}
-                    </p>
-                  </span>
-                </button>
-                <button type="button" className="dash-check-jump" onClick={() => setTab('progress')}>›</button>
-              </div>
+              {!is75Soft(challengeType) ? (
+                <div className={`dash-mission-card${displayLog.photo_done ? ' dash-mission-card--done' : ''}`}>
+                  <button
+                    type="button"
+                    className={`dash-check dash-check--fill ${displayLog.photo_done ? 'dash-check--on' : ''}`}
+                    onClick={() => toggleBool('photo_done')}
+                  >
+                    <span className="dash-check-box" aria-hidden>{displayLog.photo_done ? '✓' : ''}</span>
+                    <span className="dash-check-body">
+                      <p className="dash-check-title">Progress photo</p>
+                      <p className={`dash-check-sub ${displayLog.progress_photo ? 'dash-check-sub--good' : 'dash-check-sub--warn'}`}>
+                        {displayLog.progress_photo ? 'Photo uploaded ✓' : 'Tap › to upload in Progress'}
+                      </p>
+                    </span>
+                  </button>
+                  <button type="button" className="dash-check-jump" onClick={() => setTab('progress')}>
+                    ›
+                  </button>
+                </div>
+              ) : null}
 
               <div
                 className={`dash-mission-card${
-                  isWaterDone(displayLog)
+                  isWaterDone(displayLog, challengeType)
                     ? ' dash-mission-card--done'
                     : (displayLog.water_ml ?? 0) > 0
                       ? ' dash-mission-card--partial'
                       : ''
                 }`}
               >
-                <div className={`dash-check dash-check--fill ${isWaterDone(displayLog) ? 'dash-check--on' : ''}`}>
-                  <span className="dash-check-box" aria-hidden>{isWaterDone(displayLog) ? '✓' : ''}</span>
+                <div className={`dash-check dash-check--fill ${isWaterDone(displayLog, challengeType) ? 'dash-check--on' : ''}`}>
+                  <span className="dash-check-box" aria-hidden>
+                    {isWaterDone(displayLog, challengeType) ? '✓' : ''}
+                  </span>
                   <span className="dash-check-body">
                     <p className="dash-check-title">Water</p>
-                    <p className="dash-check-sub">{((displayLog.water_ml ?? 0) / 1000).toFixed(1)}L / 3.7L</p>
+                    <p className="dash-check-sub">
+                      {((displayLog.water_ml ?? 0) / 1000).toFixed(1)}L / {waterLitersLabel(challengeType)}L
+                    </p>
                     <div className="dash-water-bar">
                       <div
                         className="dash-water-bar-fill"
-                        style={{ width: `${Math.min(100, ((displayLog.water_ml ?? 0) / WATER_TARGET) * 100)}%` }}
+                        style={{
+                          width: `${Math.min(100, ((displayLog.water_ml ?? 0) / waterTarget) * 100)}%`,
+                        }}
                       />
                     </div>
                     <p className="dash-check-sub dash-water-milestone">
-                      {waterMilestoneMessage(displayLog.water_ml)}
+                      {waterMilestoneMessage(displayLog.water_ml, challengeType)}
                     </p>
                     <div className="dash-water-btns">
                       <button type="button" onClick={() => subtractWater(250)}>
@@ -2524,8 +2659,46 @@ export default function Dashboard() {
                   </span>
                 </div>
               </div>
+
+              {is75Soft(challengeType) ? (
+                <div
+                  className={`dash-mission-card${
+                    displayLog.is_recovery_day ? ' dash-mission-card--done' : ''
+                  }`}
+                >
+                  <button
+                    type="button"
+                    className={`dash-check dash-check--fill ${displayLog.is_recovery_day ? 'dash-check--on' : ''}`}
+                    disabled={
+                      viewDate !== calendarToday ||
+                      (recoveryWeekBlocked && !displayLog.is_recovery_day)
+                    }
+                    onClick={() => void toggleRecoveryDay()}
+                  >
+                    <span className="dash-check-box" aria-hidden>
+                      {displayLog.is_recovery_day ? '🧘' : ''}
+                    </span>
+                    <span className="dash-check-body">
+                      <p className="dash-check-title">
+                        Recovery day? <span className="dash-inline-note">(1 allowed per week)</span>
+                      </p>
+                      {displayLog.is_recovery_day ? (
+                        <p className="dash-check-sub dash-check-sub--good">
+                          🧘 Rest and light movement today — workout logged automatically
+                        </p>
+                      ) : recoveryWeekBlocked ? (
+                        <p className="dash-check-sub dash-check-sub--warn dash-check-sub--warn-muted">
+                          Recovery day already used this week
+                        </p>
+                      ) : (
+                        <p className="dash-check-sub">One gentle day per week — counts as your workout.</p>
+                      )}
+                    </span>
+                  </button>
+                </div>
+              ) : null}
             </div>
-            {workoutRuleFail ? (
+            {workoutRuleFail && !is75Soft(challengeType) ? (
               <div className="dash-workout-rule-warn">
                 ⚠️ 75 Hard requires at least one outdoor workout.
               </div>
@@ -3036,6 +3209,32 @@ export default function Dashboard() {
                                             ? 'Saving…'
                                             : 'Confirm & Log'}
                                         </button>
+                                      ) : is75Soft(challengeType) ? (
+                                        <div className="dash-meal-dirty-wrap">
+                                          <div className="dash-meal-dirty-alert dash-meal-dirty-alert--soft" role="alert">
+                                            <p className="dash-meal-dirty-title">
+                                              ⚠️ That&apos;s not the cleanest choice — but one slip doesn&apos;t end
+                                              your journey. Keep going 💪
+                                            </p>
+                                          </div>
+                                          <div className="dash-meal-dirty-actions">
+                                            <button
+                                              type="button"
+                                              className="dash-meal-dirty-dismiss"
+                                              onClick={() => dismissDirtyMealSlot(slotIndex)}
+                                            >
+                                              Don&apos;t log this meal
+                                            </button>
+                                            <button
+                                              type="button"
+                                              className="dash-meal-else-log"
+                                              onClick={() => void logActualMealForSlot(slotIndex)}
+                                              disabled={mealElseSlots[slotIndex]?.logging || !todayLog?.id}
+                                            >
+                                              {mealElseSlots[slotIndex]?.logging ? 'Saving…' : 'Log anyway'}
+                                            </button>
+                                          </div>
+                                        </div>
                                       ) : (
                                         <div className="dash-meal-dirty-wrap">
                                           <div className="dash-meal-dirty-alert" role="alert">
@@ -3160,29 +3359,57 @@ export default function Dashboard() {
                 ← Back to Today
               </button>
             ) : null}
+            {is75Soft(challengeType) ? (
+              <div className="dash-workout-recovery-top">
+                <button
+                  type="button"
+                  className="dash-btn-secondary"
+                  disabled={
+                    viewDate !== calendarToday ||
+                    (recoveryWeekBlocked && !displayLog.is_recovery_day)
+                  }
+                  onClick={() => void toggleRecoveryDay()}
+                >
+                  Mark as Recovery Day
+                </button>
+                {recoveryWeekBlocked && !displayLog.is_recovery_day ? (
+                  <p className="dash-muted dash-workout-recovery-hint">Recovery day already used this week</p>
+                ) : null}
+              </div>
+            ) : null}
             <div ref={workoutsScrollTopRef}>
               <h1 className="dash-section-title">Workouts</h1>
               <p className="dash-muted">Pick, log, or replace each slot.</p>
 
               <div className="dash-workout-slots">
-                {[{ slot: 1, data: workout1 }, { slot: 2, data: workout2 }].map(({ slot, data }) => (
+                {(is75Soft(challengeType)
+                  ? [{ slot: 1, data: workout1 }]
+                  : [{ slot: 1, data: workout1 }, { slot: 2, data: workout2 }]
+                ).map(({ slot, data }) => (
                   <div key={slot} className="dash-workout-slot-card">
                     <div className="dash-workout-slot-head">
-                      <p className="dash-workout-slot-title">WORKOUT {slot}</p>
+                      <p className="dash-workout-slot-title">
+                        {is75Soft(challengeType) ? 'WORKOUT' : `WORKOUT ${slot}`}
+                      </p>
                       {data.done ? <span className="dash-meal-slot-logged-badge">LOGGED ✓</span> : null}
                     </div>
                     {data.done ? (
                       <>
-                        <p className="dash-workout-slot-name">{data.name || `Workout ${slot}`}</p>
-                        <span
-                          className={`dash-workout-slot-location${
-                            (data.type || 'indoor') === 'outdoor'
-                              ? ' dash-workout-slot-location--outdoor'
-                              : ''
-                          }`}
-                        >
-                          {(data.type || 'indoor').toUpperCase()}
-                        </span>
+                        <p className="dash-workout-slot-name">
+                          {data.name ||
+                            (is75Soft(challengeType) ? 'Your workout · 45 min' : `Workout ${slot}`)}
+                        </p>
+                        {!is75Soft(challengeType) ? (
+                          <span
+                            className={`dash-workout-slot-location${
+                              (data.type || 'indoor') === 'outdoor'
+                                ? ' dash-workout-slot-location--outdoor'
+                                : ''
+                            }`}
+                          >
+                            {(data.type || 'indoor').toUpperCase()}
+                          </span>
+                        ) : null}
                         <button
                           type="button"
                           className="dash-meal-edit-link"
@@ -3193,8 +3420,12 @@ export default function Dashboard() {
                       </>
                     ) : (
                       <>
-                        <p className="dash-workout-slot-name">Workout {slot}</p>
-                        <span className="dash-workout-slot-location">INDOOR/OUTDOOR</span>
+                        <p className="dash-workout-slot-name">
+                          {is75Soft(challengeType) ? 'Workout · 45 min (any)' : `Workout ${slot}`}
+                        </p>
+                        {!is75Soft(challengeType) ? (
+                          <span className="dash-workout-slot-location">INDOOR/OUTDOOR</span>
+                        ) : null}
                         <div className="dash-workout-slot-btns">
                           <button
                             type="button"
@@ -3211,7 +3442,11 @@ export default function Dashboard() {
               </div>
             </div>
             {workoutInlineMsg ? <p className="dash-check-sub dash-check-sub--good">{workoutInlineMsg}</p> : null}
-            {workout1.done && workout2.done && (workout1.type || 'indoor') === 'indoor' && (workout2.type || 'indoor') === 'indoor' ? (
+            {!is75Soft(challengeType) &&
+            workout1.done &&
+            workout2.done &&
+            (workout1.type || 'indoor') === 'indoor' &&
+            (workout2.type || 'indoor') === 'indoor' ? (
               <div className="dash-workout-rule-warn">⚠️ At least one must be outdoor</div>
             ) : null}
 
@@ -3240,7 +3475,9 @@ export default function Dashboard() {
             <div ref={workoutListAnchorRef}>
               {assigningSlot ? (
                 <div className="dash-workout-assign-banner" role="status">
-                  Selecting for Workout {assigningSlot} — tap a workout below
+                  {is75Soft(challengeType)
+                    ? 'Selecting your workout — tap one below'
+                    : `Selecting for Workout ${assigningSlot} — tap a workout below`}
                 </div>
               ) : null}
               <div className="dash-work-list">
@@ -3268,7 +3505,7 @@ export default function Dashboard() {
                           {workout1.done ? 'Replace Workout 1' : 'Select for Workout 1'}
                         </button>
                       ) : null}
-                      {assigningSlot === 2 ? (
+                      {!is75Soft(challengeType) && assigningSlot === 2 ? (
                         <button
                           type="button"
                           className="dash-btn-secondary"
@@ -3284,15 +3521,23 @@ export default function Dashboard() {
                             className="dash-btn-secondary"
                             onClick={() => void logWorkoutToSlot(1, w.name, w.location)}
                           >
-                            {workout1.done ? 'Replace Workout 1' : 'Log as Workout 1'}
+                            {workout1.done
+                              ? is75Soft(challengeType)
+                                ? 'Replace workout'
+                                : 'Replace Workout 1'
+                              : is75Soft(challengeType)
+                                ? 'Log workout'
+                                : 'Log as Workout 1'}
                           </button>
-                          <button
-                            type="button"
-                            className="dash-btn-secondary"
-                            onClick={() => void logWorkoutToSlot(2, w.name, w.location)}
-                          >
-                            {workout2.done ? 'Replace Workout 2' : 'Log as Workout 2'}
-                          </button>
+                          {!is75Soft(challengeType) ? (
+                            <button
+                              type="button"
+                              className="dash-btn-secondary"
+                              onClick={() => void logWorkoutToSlot(2, w.name, w.location)}
+                            >
+                              {workout2.done ? 'Replace Workout 2' : 'Log as Workout 2'}
+                            </button>
+                          ) : null}
                         </>
                       ) : null}
                     </div>
@@ -3307,23 +3552,44 @@ export default function Dashboard() {
           <>
             <h1 className="dash-section-title">Progress</h1>
             <p className="dash-muted">Your 75-day snapshot.</p>
-            <div className="dash-photo-upload-row dash-photo-upload-row--below" style={{ marginBottom: '0.9rem' }}>
-              <input
-                ref={progressPhotoInputRef}
-                type="file"
-                accept="image/*"
-                className="dash-photo-file-input"
-                onChange={(e) => void onProgressPhotoFile(e)}
-              />
-              <button
-                type="button"
-                className="dash-photo-upload-btn"
-                disabled={progressPhotoBusy}
-                onClick={() => progressPhotoInputRef.current?.click()}
-              >
-                {progressPhotoBusy ? 'Processing…' : 'Upload today’s progress photo'}
-              </button>
-            </div>
+            {showSoft75CompleteBanner ? (
+              <div className="dash-soft-celebrate" role="status">
+                <p className="dash-soft-celebrate-text">
+                  🎉 You completed 75 Soft! You built the habit. Ready for the real test?
+                </p>
+                <button
+                  type="button"
+                  className="dash-soft-celebrate-btn"
+                  disabled={challengeSwitchBusy}
+                  onClick={() => void handleUpgradeTo75HardFromSoftBanner()}
+                >
+                  {challengeSwitchBusy ? 'Working…' : 'Start 75 Hard →'}
+                </button>
+              </div>
+            ) : null}
+            {!is75Soft(challengeType) ? (
+              <div className="dash-photo-upload-row dash-photo-upload-row--below" style={{ marginBottom: '0.9rem' }}>
+                <input
+                  ref={progressPhotoInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="dash-photo-file-input"
+                  onChange={(e) => void onProgressPhotoFile(e)}
+                />
+                <button
+                  type="button"
+                  className="dash-photo-upload-btn"
+                  disabled={progressPhotoBusy}
+                  onClick={() => progressPhotoInputRef.current?.click()}
+                >
+                  {progressPhotoBusy ? 'Processing…' : 'Upload today’s progress photo'}
+                </button>
+              </div>
+            ) : (
+              <p className="dash-muted" style={{ marginBottom: '0.85rem' }}>
+                Progress photos are optional on 75 Soft. You can upload one anytime from the Today tab.
+              </p>
+            )}
 
             <div className="dash-attempts-bar">
               <label className="dash-attempts-label" htmlFor="attempt-select">
@@ -3355,7 +3621,9 @@ export default function Dashboard() {
                   Started {formatLongDate(progressMeta.start)}
                 </p>
                 <p className="dash-progress-meta-line">
-                  Days with all 6 tasks completed: {progressMeta.daysCompleted}
+                  Days completed (all{' '}
+                  {is75Soft(challengeType) ? 5 : 6}
+                  ): {progressMeta.daysCompleted}
                 </p>
               </div>
             ) : null}
@@ -3385,9 +3653,13 @@ export default function Dashboard() {
               75-day grid
             </h3>
             <p className="dash-muted" style={{ marginTop: '-0.5rem' }}>
-              {isProgressHistoryView
-                ? 'Past attempt (read-only): green = all 6 tasks done · red = missed · dark gray = future days in this window · orange outline = that calendar day'
-                : 'Green = all 6 tasks done · red = incomplete (day has passed) · dark gray = future days · orange outline = today'}
+              {is75Soft(challengeType)
+                ? isProgressHistoryView
+                  ? 'Past attempt: green = full day · yellow = partial · gray = no log / future · orange outline = that day'
+                  : 'Green = all tasks done · yellow = partial progress · gray = no log yet · orange outline = today'
+                : isProgressHistoryView
+                  ? 'Past attempt (read-only): green = all 6 tasks done · red = missed · dark gray = future days in this window · orange outline = that calendar day'
+                  : 'Green = all 6 tasks done · red = incomplete (day has passed) · dark gray = future days · orange outline = today'}
             </p>
             <div
               className={`dash-grid-75${isProgressHistoryView ? ' dash-grid-75--readonly' : ''}`}
@@ -3396,6 +3668,8 @@ export default function Dashboard() {
                 let cls = 'dash-grid-cell'
                 if (gridKind === 'future') cls += ' dash-grid-cell--future'
                 else if (gridKind === 'perfect') cls += ' dash-grid-cell--perfect'
+                else if (gridKind === 'partial') cls += ' dash-grid-cell--partial'
+                else if (gridKind === 'empty') cls += ' dash-grid-cell--empty'
                 else cls += ' dash-grid-cell--failed'
                 if (isToday) cls += ' dash-grid-cell--today'
                 if (hasPhoto) cls += ' dash-grid-cell--has-photo'
@@ -3466,7 +3740,7 @@ export default function Dashboard() {
                     {key === todayLocalISO() ? ' · Today' : ''}
                   </p>
                   <p className="dash-recent-tasks">
-                    {taskBreakdownLine(log)}
+                    {taskBreakdownLine(log, challengeType)}
                     {log?.reading_log?.book_title
                       ? ` · 📖 ${String(log.reading_log.book_title).trim()}`
                       : ''}
@@ -3476,7 +3750,77 @@ export default function Dashboard() {
             </div>
           </>
         )}
+
+        {tab === 'profile' && profile && (
+          <>
+            <h1 className="dash-section-title">Profile</h1>
+            <p className="dash-muted">Your account and challenge.</p>
+            <div className="dash-profile-card">
+              <div className="dash-profile-row">
+                <span className="dash-profile-label">Username</span>
+                <span className="dash-profile-value">{profile.username ?? '—'}</span>
+              </div>
+              <div className="dash-profile-row">
+                <span className="dash-profile-label">Current Challenge</span>
+                <span className="dash-profile-value">
+                  {is75Soft(challengeType) ? (
+                    <span className="dash-challenge-badge dash-challenge-badge--soft">75 SOFT</span>
+                  ) : (
+                    <span className="dash-challenge-badge dash-challenge-badge--hard">75 HARD</span>
+                  )}
+                </span>
+              </div>
+              <div className="dash-profile-row">
+                <span className="dash-profile-label">Start date</span>
+                <span className="dash-profile-value">{profile.start_date ?? '—'}</span>
+              </div>
+              <button
+                type="button"
+                className="dash-profile-switch-link"
+                onClick={() => setChallengeSwitchOpen(true)}
+              >
+                Switch Challenge
+              </button>
+            </div>
+          </>
+        )}
       </main>
+
+      {challengeSwitchOpen ? (
+        <div
+          className="dash-restart-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="switch-challenge-title"
+        >
+          <div className="dash-restart-panel">
+            <h2 id="switch-challenge-title" className="dash-restart-title">
+              Switch challenge?
+            </h2>
+            <p className="dash-restart-body">
+              Switching will keep your data but reset your challenge. Are you sure?
+            </p>
+            <div className="dash-restart-actions-row">
+              <button
+                type="button"
+                className="dash-meal-dirty-dismiss"
+                onClick={() => setChallengeSwitchOpen(false)}
+                disabled={challengeSwitchBusy}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="dash-restart-cta"
+                onClick={() => void confirmSwitchChallenge()}
+                disabled={challengeSwitchBusy}
+              >
+                {challengeSwitchBusy ? 'Working…' : 'Yes, reset & switch'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {readingModalOpen ? (
         <>
@@ -3716,7 +4060,7 @@ export default function Dashboard() {
         </div>
       ) : null}
 
-      {restartFailureModal ? (
+      {restartFailureModal && !is75Soft(challengeType) ? (
         <div
           className="dash-restart-overlay"
           role="alertdialog"
@@ -3765,11 +4109,12 @@ export default function Dashboard() {
 
       <nav className="dash-nav" aria-label="Main">
         {[
-          { id: 'today', label: 'Today' },
-          { id: 'meals', label: 'Meals' },
-          { id: 'workouts', label: 'Workouts' },
-          { id: 'progress', label: 'Progress' },
-        ].map(({ id, label }) => (
+          { id: 'today', label: 'Today', icon: '◎' },
+          { id: 'meals', label: 'Meals', icon: '◆' },
+          { id: 'workouts', label: 'Workouts', icon: '◇' },
+          { id: 'progress', label: 'Progress', icon: '▦' },
+          { id: 'profile', label: 'Profile', icon: '○' },
+        ].map(({ id, label, icon }) => (
           <button
             key={id}
             type="button"
@@ -3777,10 +4122,7 @@ export default function Dashboard() {
             onClick={() => setTab(id)}
           >
             <span className="dash-nav-icon" aria-hidden>
-              {id === 'today' && '◎'}
-              {id === 'meals' && '◆'}
-              {id === 'workouts' && '◇'}
-              {id === 'progress' && '▦'}
+              {icon}
             </span>
             {label}
           </button>
