@@ -25,11 +25,9 @@ import {
   workoutRuleViolated,
   isWaterDone,
   isPerfectLog,
-  missedRequirementLabels,
   taskBreakdownLine,
   waterMilestoneMessage,
   summarizeAttemptThrough,
-  dayFailsHardRules,
   recoveryDayUsedElsewhereInWeek,
 } from '../lib/challenge'
 import './dashboard.css'
@@ -416,6 +414,13 @@ function addDaysISO(iso, delta) {
   return formatLocalDate(d)
 }
 
+/** Whole calendar days from `isoEarlier` to `isoLater` (non-negative when earlier <= later). */
+function calendarDaysSince(isoEarlier, isoLater) {
+  const a = parseISODateLocal(isoEarlier)
+  const b = parseISODateLocal(isoLater)
+  return Math.round((b - a) / 86400000)
+}
+
 function minDateStr(a, b) {
   return a <= b ? a : b
 }
@@ -443,12 +448,6 @@ function emptyDayLog(date) {
     workout_voice: null,
     is_recovery_day: false,
   }
-}
-
-function attemptAgeDays(startDateStr, refDateStr) {
-  const a = parseISODateLocal(startDateStr)
-  const b = parseISODateLocal(refDateStr)
-  return Math.round((b - a) / 86400000)
 }
 
 function formatLongDate(iso) {
@@ -907,6 +906,8 @@ export default function Dashboard() {
   const [mealElseSlots, setMealElseSlots] = useState(createInitialMealElseSlots)
   const [mealElseRestartBusy, setMealElseRestartBusy] = useState(false)
   const [attemptBannerMessage, setAttemptBannerMessage] = useState('')
+  const [gentleUnloggedBanner, setGentleUnloggedBanner] = useState(false)
+  const [showAllMissingLogs, setShowAllMissingLogs] = useState(false)
   const [macroRecalibratedToast, setMacroRecalibratedToast] = useState('')
   const [activeLogEditSlot, setActiveLogEditSlot] = useState(null)
   const [showMealsBackCta, setShowMealsBackCta] = useState(false)
@@ -939,12 +940,18 @@ export default function Dashboard() {
   const mealElseSlotsRef = useRef(mealElseSlots)
   const mealCardRefs = useRef(MEAL_SLOT_ORDER.map(() => null))
   const todayLogRef = useRef(null)
+  const pastViewLogRef = useRef(null)
+  const jumpDateInputRef = useRef(null)
   const userIdRef = useRef(null)
   const viewDateRef = useRef(viewDate)
 
   useEffect(() => {
     todayLogRef.current = todayLog
   }, [todayLog])
+
+  useEffect(() => {
+    pastViewLogRef.current = pastViewLog
+  }, [pastViewLog])
 
   useEffect(() => {
     mealElseSlotsRef.current = mealElseSlots
@@ -955,19 +962,19 @@ export default function Dashboard() {
   }, [viewDate])
 
   useEffect(() => {
-    if (!todayLog?.meal_plan) return
-    const plan = todayLog.meal_plan
+    if (!displayLog?.meal_plan) return
+    const plan = displayLog.meal_plan
     queueMicrotask(() => {
       setMealPlanOutput((prev) => prev || plan)
     })
-  }, [todayLog?.id, todayLog?.meal_plan])
+  }, [displayLog?.id, displayLog?.meal_plan])
 
   useEffect(() => {
     queueMicrotask(() => {
       setMealElseSlots(createInitialMealElseSlots())
       setActiveLogEditSlot(null)
     })
-  }, [todayLog?.id])
+  }, [displayLog?.id, viewDate])
 
   useEffect(() => {
     if (!macroRecalibratedToast) return undefined
@@ -999,10 +1006,8 @@ export default function Dashboard() {
   const taskSegments = useMemo(() => challengeTaskCount(challengeType), [challengeType])
 
   const calendarToday = todayLocalISO()
-  const displayLog = useMemo(() => {
-    if (viewDate === calendarToday) return todayLog
-    return pastViewLog ?? emptyDayLog(viewDate)
-  }, [viewDate, calendarToday, todayLog, pastViewLog])
+  const displayLog =
+    viewDate === calendarToday ? todayLog : pastViewLog ?? emptyDayLog(viewDate)
 
   const dayOf75View = useMemo(
     () => challengeDayNumber(startDateStr, viewDate),
@@ -1028,6 +1033,12 @@ export default function Dashboard() {
     return attempts.find((a) => !a.ended_at) ?? attempts[attempts.length - 1]
   }, [attempts, progressAttemptId])
 
+  const activeAttempt = useMemo(
+    () => (Array.isArray(attempts) ? attempts.find((a) => !a.ended_at) : null) ?? null,
+    [attempts]
+  )
+  const attemptNavStart = activeAttempt?.start_date ?? startDateStr
+
   useEffect(() => {
     if (!progressAttemptId || !attempts.length) return
     const ok = attempts.some((a) => a.id === progressAttemptId && a.ended_at)
@@ -1046,6 +1057,23 @@ export default function Dashboard() {
     () => !!(progressAttemptId && progressScopedAttempt?.ended_at),
     [progressAttemptId, progressScopedAttempt?.ended_at]
   )
+
+  const missingLogDates = useMemo(() => {
+    const att = progressScopedAttempt
+    if (!att?.start_date) return []
+    const start = att.start_date
+    const y = addDaysISO(todayLocalISO(), -1)
+    const rawEnd = att.ended_at ?? todayLocalISO()
+    const lastChallengeDay = addDaysISO(start, 74)
+    const through = minDateStr(minDateStr(rawEnd, y), lastChallengeDay)
+    if (through < start) return []
+    const out = []
+    for (let d = start; d <= through; d = addDaysISO(d, 1)) {
+      if (!logsByDate.has(d)) out.push(d)
+    }
+    out.reverse()
+    return out
+  }, [progressScopedAttempt, logsByDate])
 
   const progressStats = useMemo(() => {
     const start = progressScopedAttempt?.start_date ?? startDateStr
@@ -1141,6 +1169,11 @@ export default function Dashboard() {
     return rows
   }, [progressScopedAttempt, startDateStr, logsByDate])
 
+  const progressEditRangeStart = useMemo(
+    () => progressScopedAttempt?.start_date ?? startDateStr,
+    [progressScopedAttempt, startDateStr]
+  )
+
   const progressPhotosGallery = useMemo(() => {
     const start = progressScopedAttempt?.start_date ?? startDateStr
     const rawEnd = progressScopedAttempt?.ended_at ?? todayLocalISO()
@@ -1214,6 +1247,7 @@ export default function Dashboard() {
 
   const load = useCallback(async () => {
     setLoadError('')
+    setGentleUnloggedBanner(false)
     const t = todayLocalISO()
     setTodayStr(t)
 
@@ -1384,25 +1418,33 @@ export default function Dashboard() {
     await refreshReadingBooks(uid)
 
     const activeOnly = (attRows ?? []).find((a) => !a.ended_at)
-    if (activeOnly && t !== activeOnly.start_date) {
+    if (!is75Soft(ctLoad) && activeOnly && t !== activeOnly.start_date) {
+      const map = new Map((logsData ?? []).map((r) => [r.date, r]))
+      const start = activeOnly.start_date
       const yest = addDaysISO(t, -1)
-      if (yest >= activeOnly.start_date) {
-        const map = new Map((logsData ?? []).map((r) => [r.date, r]))
-        const yLog = map.get(yest)
-        const age = attemptAgeDays(activeOnly.start_date, t)
-        const failedYesterday = dayFailsHardRules(yLog, age, ctLoad)
-        if (failedYesterday) {
-          const missedLabels = yLog ? missedRequirementLabels(yLog, ctLoad) : ['No daily log recorded']
-          const prevStats = summarizeAttemptThrough(activeOnly, yest, map, ctLoad)
+      let firstMiss = null
+      if (yest >= start) {
+        for (let d = yest; d >= start; d = addDaysISO(d, -1)) {
+          if (!map.get(d)) {
+            firstMiss = d
+            break
+          }
+        }
+      }
+      if (firstMiss) {
+        const gap = calendarDaysSince(firstMiss, t)
+        if (gap <= 3) {
           const nums = (attRows ?? []).map((a) => a.attempt_number)
           const nextNum = (nums.length ? Math.max(...nums) : 0) + 1
           setRestartFailureModal({
-            missedDate: yest,
-            missedLabels,
+            missedDate: firstMiss,
+            missedLabels: ['No daily log recorded'],
             nextAttemptNum: nextNum,
-            prevStats,
+            prevStats: summarizeAttemptThrough(activeOnly, addDaysISO(firstMiss, -1), map, ctLoad),
             prevAttemptNumber: activeOnly.attempt_number,
           })
+        } else {
+          setGentleUnloggedBanner(true)
         }
       }
     }
@@ -1450,27 +1492,80 @@ export default function Dashboard() {
     }
   }, [viewDate, ready])
 
-  const persistLogPatch = useCallback(async (patch) => {
-    const prev = todayLogRef.current
-    if (!prev?.id) return { error: new Error('No log') }
-    const next = { ...prev, ...patch }
-    todayLogRef.current = next
-    setTodayLog(next)
+  const ensureDailyLogForView = useCallback(async () => {
+    const uid = userIdRef.current
+    const vd = viewDateRef.current
+    const cal = todayLocalISO()
+    if (!uid || !vd) return { row: null, error: new Error('Not ready') }
+
+    const readRow = () => (vd === cal ? todayLogRef.current : pastViewLogRef.current)
+    let row = readRow()
+    if (row?.id) return { row, error: null }
+
+    const { data: inserted, error: iErr } = await supabase
+      .from('daily_logs')
+      .insert({ user_id: uid, date: vd })
+      .select('*')
+      .single()
+
+    let finalRow = inserted
+    if (iErr) {
+      const { data: again } = await supabase
+        .from('daily_logs')
+        .select('*')
+        .eq('user_id', uid)
+        .eq('date', vd)
+        .maybeSingle()
+      if (!again?.id) return { row: null, error: iErr }
+      finalRow = again
+    }
+
     setAllLogs((logs) => {
-      const idx = logs.findIndex((r) => r.id === next.id)
-      if (idx === -1) {
-        return [...logs, next].sort((a, b) => a.date.localeCompare(b.date))
-      }
+      const idx = logs.findIndex((r) => r.id === finalRow.id)
+      if (idx === -1) return [...logs, finalRow].sort((a, b) => a.date.localeCompare(b.date))
       const copy = [...logs]
-      copy[idx] = next
+      copy[idx] = finalRow
       return copy
     })
-    const { error } = await supabase
-      .from('daily_logs')
-      .update(patch)
-      .eq('id', prev.id)
-    return { error }
+    if (vd === cal) {
+      todayLogRef.current = finalRow
+      setTodayLog(finalRow)
+    } else {
+      pastViewLogRef.current = finalRow
+      setPastViewLog(finalRow)
+    }
+    return { row: finalRow, error: null }
   }, [])
+
+  const persistLogPatch = useCallback(
+    async (patch) => {
+      const vdAtStart = viewDateRef.current
+      const cal = todayLocalISO()
+      const { row: base, error: e0 } = await ensureDailyLogForView()
+      if (e0 || !base?.id) return { error: e0 || new Error('No log') }
+      if (viewDateRef.current !== vdAtStart) return { error: new Error('Date changed') }
+      const next = { ...base, ...patch }
+      if (vdAtStart === cal) {
+        todayLogRef.current = next
+        setTodayLog(next)
+      } else {
+        pastViewLogRef.current = next
+        setPastViewLog(next)
+      }
+      setAllLogs((logs) => {
+        const idx = logs.findIndex((r) => r.id === next.id)
+        if (idx === -1) {
+          return [...logs, next].sort((a, b) => a.date.localeCompare(b.date))
+        }
+        const copy = [...logs]
+        copy[idx] = next
+        return copy
+      })
+      const { error } = await supabase.from('daily_logs').update(patch).eq('id', base.id)
+      return { error }
+    },
+    [ensureDailyLogForView]
+  )
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
@@ -1478,9 +1573,8 @@ export default function Dashboard() {
   }
 
   const toggleBool = async (field) => {
-    if (viewDateRef.current !== todayLocalISO()) return
-    const cur = todayLogRef.current
-    if (!cur?.id) return
+    const { row: cur, error: e0 } = await ensureDailyLogForView()
+    if (e0 || !cur?.id) return
     const was = !!cur[field]
     const next = !was
     const patch = { [field]: next }
@@ -1506,16 +1600,14 @@ export default function Dashboard() {
   }
 
   const addWater = async (ml) => {
-    if (viewDateRef.current !== todayLocalISO()) return
-    const cur = todayLogRef.current
+    const { row: cur } = await ensureDailyLogForView()
     if (!cur?.id) return
     const current = cur.water_ml ?? 0
     await persistLogPatch({ water_ml: current + ml })
   }
 
   const subtractWater = async (ml) => {
-    if (viewDateRef.current !== todayLocalISO()) return
-    const cur = todayLogRef.current
+    const { row: cur } = await ensureDailyLogForView()
     if (!cur?.id) return
     const current = cur.water_ml ?? 0
     await persistLogPatch({ water_ml: Math.max(0, current - ml) })
@@ -1651,9 +1743,8 @@ export default function Dashboard() {
   }
 
   const logWorkoutToSlot = async (slot, workoutName, locationType, opts = {}) => {
-    if (viewDateRef.current !== todayLocalISO()) return
-    const cur = todayLogRef.current
-    if (!cur?.id || !workoutName) return
+    const { row: cur, error: e0 } = await ensureDailyLogForView()
+    if (e0 || !cur?.id || !workoutName) return
     const patch =
       slot === 1
         ? {
@@ -1692,7 +1783,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (!readingModalOpen) return
-    const rl = todayLog?.reading_log
+    const rl = displayLog?.reading_log
     if (rl && typeof rl === 'object') {
       queueMicrotask(() => {
         if (rl.book_id) setReadingBookChoice(String(rl.book_id))
@@ -1704,17 +1795,17 @@ export default function Dashboard() {
     if (!readingBookChoice && readingBooks.length) {
       queueMicrotask(() => setReadingBookChoice(String(readingBooks[0].id)))
     }
-  }, [readingModalOpen, todayLog?.reading_log, readingBooks, readingBookChoice])
+  }, [readingModalOpen, displayLog?.reading_log, readingBooks, readingBookChoice])
 
   useEffect(() => {
     if (!readingModalOpen || !selectedReadingBook) return
-    if (todayLog?.reading_log?.book_id === selectedReadingBook.id) return
+    if (displayLog?.reading_log?.book_id === selectedReadingBook.id) return
     const start = Math.max(1, readingLastEndPage + 1)
     queueMicrotask(() => {
       setReadingSessionStartPage(String(start))
       setReadingSessionEndPage(String(start + 9))
     })
-  }, [readingModalOpen, selectedReadingBook, readingLastEndPage, todayLog?.reading_log])
+  }, [readingModalOpen, selectedReadingBook, readingLastEndPage, displayLog?.reading_log])
 
   useEffect(() => {
     queueMicrotask(() => {
@@ -1726,6 +1817,7 @@ export default function Dashboard() {
       if (tab === 'progress' && !selectedProgressDate) {
         setSelectedProgressDate(todayLocalISO())
       }
+      if (tab === 'progress') setShowAllMissingLogs(false)
     })
   }, [tab, selectedProgressDate])
 
@@ -1785,9 +1877,8 @@ export default function Dashboard() {
   }, [progressPhotosFlipOrder, flipIntervalMs])
 
   const saveReadingLog = async (markDone = false) => {
-    if (viewDateRef.current !== todayLocalISO()) return
-    const cur = todayLogRef.current
-    if (!cur?.id) return
+    const { row: cur, error: e0 } = await ensureDailyLogForView()
+    if (e0 || !cur?.id) return false
     setLoadError('')
     let book = selectedReadingBook
     if (readingAddNewBook) {
@@ -1847,11 +1938,16 @@ export default function Dashboard() {
       setLoadError(error.message || 'Could not save reading log.')
       return false
     }
-    if (markDone && !todayLogRef.current?.reading_done) {
-      const doneRes = await persistLogPatch({ reading_done: true })
-      if (doneRes.error) {
-        setLoadError(doneRes.error.message || 'Could not mark reading as done.')
-        return false
+    if (markDone) {
+      const cal = todayLocalISO()
+      const vd = viewDateRef.current
+      const r = vd === cal ? todayLogRef.current : pastViewLogRef.current
+      if (r && !r.reading_done) {
+        const doneRes = await persistLogPatch({ reading_done: true })
+        if (doneRes.error) {
+          setLoadError(doneRes.error.message || 'Could not mark reading as done.')
+          return false
+        }
       }
     }
     return true
@@ -1861,9 +1957,40 @@ export default function Dashboard() {
     const file = e.target.files?.[0]
     e.target.value = ''
     if (!file || !file.type.startsWith('image/')) return
-    if (viewDateRef.current !== todayLocalISO()) return
-    const cur = todayLogRef.current
-    if (!cur?.id) return
+    const uid = userIdRef.current
+    const t0 = todayLocalISO()
+    if (!uid) return
+
+    let row = todayLogRef.current
+    if (!row?.id || row.date !== t0) {
+      const { data: existing } = await supabase
+        .from('daily_logs')
+        .select('*')
+        .eq('user_id', uid)
+        .eq('date', t0)
+        .maybeSingle()
+      row = existing
+    }
+    if (!row?.id) {
+      const { data: ins, error: insErr } = await supabase
+        .from('daily_logs')
+        .insert({ user_id: uid, date: t0 })
+        .select('*')
+        .single()
+      if (insErr || !ins) {
+        const { data: again } = await supabase
+          .from('daily_logs')
+          .select('*')
+          .eq('user_id', uid)
+          .eq('date', t0)
+          .maybeSingle()
+        row = again
+      } else {
+        row = ins
+      }
+    }
+    if (!row?.id) return
+
     setProgressPhotoBusy(true)
     setLoadError('')
     try {
@@ -1872,8 +1999,21 @@ export default function Dashboard() {
         setLoadError('Image is still too large after resize. Try a smaller photo.')
         return
       }
-      const { error } = await persistLogPatch({ progress_photo: dataUrl })
-      if (error) setLoadError(error.message || 'Upload failed')
+      const { error } = await supabase.from('daily_logs').update({ progress_photo: dataUrl }).eq('id', row.id)
+      if (error) {
+        setLoadError(error.message || 'Upload failed')
+        return
+      }
+      const merged = { ...row, progress_photo: dataUrl }
+      todayLogRef.current = merged
+      setTodayLog(merged)
+      setAllLogs((logs) => {
+        const idx = logs.findIndex((r) => r.id === merged.id)
+        if (idx === -1) return [...logs, merged].sort((a, b) => a.date.localeCompare(b.date))
+        const copy = [...logs]
+        copy[idx] = merged
+        return copy
+      })
     } catch {
       setLoadError('Could not process image.')
     } finally {
@@ -1939,9 +2079,8 @@ export default function Dashboard() {
   }
 
   const saveMealPlanToLog = async () => {
-    if (viewDateRef.current !== todayLocalISO()) return
-    const cur = todayLogRef.current
-    if (!cur?.id) return
+    const { row: cur, error: e0 } = await ensureDailyLogForView()
+    if (e0 || !cur?.id) return
     const body = (mealPlanOutput ?? '').trim()
     if (!body) return
     setMealPlanSaveBusy(true)
@@ -2007,13 +2146,12 @@ export default function Dashboard() {
   }
 
   const logActualMealForSlot = async (slotIndex) => {
-    if (viewDateRef.current !== todayLocalISO()) return
-    const cur = todayLogRef.current
-    if (!cur?.id) return
+    const { row: cur, error: e0 } = await ensureDailyLogForView()
+    if (e0 || !cur?.id) return
     const slot = mealElseSlotsRef.current[slotIndex]
     const analysis = slot?.result
     const draft = (slot?.draft ?? '').trim()
-    const soft = is75Soft(normalizeChallengeType(profile?.challenge_type))
+    const soft = is75Soft(challengeType)
     if (!analysis || !draft) return
     if (!soft && !analysis.is_clean_diet) return
     setMealElseSlots((prev) => {
@@ -2109,7 +2247,7 @@ export default function Dashboard() {
   const macros = profile?.macros ?? EMPTY_MACROS_FALLBACK
 
   const actualNutritionTracker = useMemo(() => {
-    const meals = Array.isArray(todayLog?.actual_meals) ? todayLog.actual_meals : []
+    const meals = Array.isArray(displayLog?.actual_meals) ? displayLog.actual_meals : []
     if (!meals.length) return null
     const totals = sumActualMacrosFromMeals(meals)
     const targets = {
@@ -2143,17 +2281,17 @@ export default function Dashboard() {
       return { key, label: labels[key], act, tgt, pct, tone }
     })
     return { totals, targets, rows, loggedCount: meals.length }
-  }, [todayLog, macros])
+  }, [displayLog, macros])
 
   const todayMealsLogged = useMemo(() => {
-    const meals = Array.isArray(todayLog?.actual_meals) ? todayLog.actual_meals : []
+    const meals = Array.isArray(displayLog?.actual_meals) ? displayLog.actual_meals : []
     return meals.length
-  }, [todayLog])
+  }, [displayLog])
 
   const hasNonCleanMeal = useMemo(() => {
-    const meals = Array.isArray(todayLog?.actual_meals) ? todayLog.actual_meals : []
+    const meals = Array.isArray(displayLog?.actual_meals) ? displayLog.actual_meals : []
     return meals.some((m) => m?.is_clean === false)
-  }, [todayLog])
+  }, [displayLog])
 
   const workout1 = useMemo(
     () => ({
@@ -2218,7 +2356,7 @@ export default function Dashboard() {
       return `📖 ${title} · ${pages} pages`
     }
     return 'Non-fiction · 10 pages minimum'
-  }, [displayLog?.reading_log])
+  }, [displayLog])
 
   const workoutRuleFail = useMemo(() => {
     if (is75Soft(challengeType)) return false
@@ -2242,16 +2380,17 @@ export default function Dashboard() {
   }, [todayTaskDoneCount, challengeType, taskSegments])
 
   const recoveryWeekBlocked = useMemo(() => {
-    if (!is75Soft(challengeType) || viewDate !== calendarToday || !todayLog?.date) return false
-    if (todayLog?.is_recovery_day) return false
-    return recoveryDayUsedElsewhereInWeek(allLogs, calendarToday, todayLog.date)
-  }, [challengeType, viewDate, calendarToday, todayLog, allLogs])
+    if (!is75Soft(challengeType)) return false
+    const logDate = displayLog?.date ?? viewDate
+    if (!logDate) return false
+    if (displayLog?.is_recovery_day) return false
+    return recoveryDayUsedElsewhereInWeek(allLogs, logDate, logDate)
+  }, [challengeType, displayLog, viewDate, allLogs])
 
   const toggleRecoveryDay = async () => {
     if (!is75Soft(challengeType)) return
-    if (viewDateRef.current !== todayLocalISO()) return
-    const cur = todayLogRef.current
-    if (!cur?.id) return
+    const { row: cur, error: e0 } = await ensureDailyLogForView()
+    if (e0 || !cur?.id) return
     const turningOn = !cur.is_recovery_day
     if (turningOn && recoveryWeekBlocked) return
     if (turningOn) {
@@ -2301,13 +2440,13 @@ export default function Dashboard() {
 
   const loggedMealsBySlot = useMemo(() => {
     const map = new Map()
-    const meals = Array.isArray(todayLog?.actual_meals) ? todayLog.actual_meals : []
+    const meals = Array.isArray(displayLog?.actual_meals) ? displayLog.actual_meals : []
     for (const m of meals) {
       if (!m?.meal_slot) continue
       map.set(m.meal_slot, m)
     }
     return map
-  }, [todayLog])
+  }, [displayLog])
 
   const mealSlotStatus = useMemo(() => {
     return MEAL_SLOT_ORDER.map((slot, i) => {
@@ -2420,6 +2559,26 @@ export default function Dashboard() {
     })
   }, [workoutCatalog, workoutPrefChips, workoutPrefNotes])
 
+  const shiftViewDateBy = useCallback(
+    (deltaDays) => {
+      const next = addDaysISO(viewDate, deltaDays)
+      const t0 = todayLocalISO()
+      if (next < attemptNavStart || next > t0) return
+      setViewDate(next)
+    },
+    [viewDate, attemptNavStart]
+  )
+
+  const onJumpDatePicked = useCallback(
+    (e) => {
+      const v = e.target.value
+      const t0 = todayLocalISO()
+      if (!v || v < attemptNavStart || v > t0) return
+      setViewDate(v)
+    },
+    [attemptNavStart]
+  )
+
   if (!ready) {
     return <div className="dashboard-loading">Loading…</div>
   }
@@ -2442,6 +2601,20 @@ export default function Dashboard() {
           </p>
         ) : null}
         {loadError ? <p className="dash-error">{loadError}</p> : null}
+        {gentleUnloggedBanner ? (
+          <div className="dash-gentle-unlogged-banner" role="status">
+            <p className="dash-gentle-unlogged-banner-text">
+              You have unlogged days — backfill them from the Progress tab to keep your challenge valid.
+            </p>
+            <button
+              type="button"
+              className="dash-gentle-unlogged-banner-dismiss"
+              onClick={() => setGentleUnloggedBanner(false)}
+            >
+              Dismiss
+            </button>
+          </div>
+        ) : null}
 
         {tab === 'today' && profile && displayLog && (
           <>
@@ -2457,6 +2630,51 @@ export default function Dashboard() {
                 </button>
               </div>
             ) : null}
+            {viewDate < calendarToday ? (
+              <div className="dash-edit-day-banner" role="status">
+                Editing Day {dayOf75View} — {formatLongDate(viewDate)}
+              </div>
+            ) : null}
+            <div className="dash-date-nav" aria-label="Day navigation">
+              <button
+                type="button"
+                className="dash-date-nav-btn"
+                onClick={() => shiftViewDateBy(-1)}
+                disabled={viewDate <= attemptNavStart}
+                aria-label="Previous day"
+              >
+                ‹
+              </button>
+              <button
+                type="button"
+                className="dash-date-nav-cal"
+                aria-label="Jump to date"
+                onClick={() => {
+                  jumpDateInputRef.current?.showPicker?.()
+                  jumpDateInputRef.current?.click()
+                }}
+              >
+                📅
+              </button>
+              <input
+                ref={jumpDateInputRef}
+                type="date"
+                className="dash-date-nav-picker"
+                min={attemptNavStart}
+                max={calendarToday}
+                aria-label="Pick a date"
+                onChange={onJumpDatePicked}
+              />
+              <button
+                type="button"
+                className="dash-date-nav-btn"
+                onClick={() => shiftViewDateBy(1)}
+                disabled={viewDate >= calendarToday}
+                aria-label="Next day"
+              >
+                ›
+              </button>
+            </div>
             <h1 className="dash-section-title dash-mission-title">DAY {dayOf75View}</h1>
             <p className="dash-muted dash-day-sub">of 75 · {formatLongDate(viewDate)}</p>
 
@@ -2724,10 +2942,7 @@ export default function Dashboard() {
                   <button
                     type="button"
                     className={`dash-check dash-check--fill ${displayLog.is_recovery_day ? 'dash-check--on' : ''}`}
-                    disabled={
-                      viewDate !== calendarToday ||
-                      (recoveryWeekBlocked && !displayLog.is_recovery_day)
-                    }
+                    disabled={recoveryWeekBlocked && !displayLog.is_recovery_day}
                     onClick={() => void toggleRecoveryDay()}
                   >
                     <span className="dash-check-box" aria-hidden>
@@ -3258,7 +3473,7 @@ export default function Dashboard() {
                                           type="button"
                                           className="dash-meal-else-log"
                                           onClick={() => void logActualMealForSlot(slotIndex)}
-                                          disabled={mealElseSlots[slotIndex]?.logging || !todayLog?.id}
+                                          disabled={mealElseSlots[slotIndex]?.logging || !displayLog?.id}
                                         >
                                           {mealElseSlots[slotIndex]?.logging
                                             ? 'Saving…'
@@ -3284,7 +3499,7 @@ export default function Dashboard() {
                                               type="button"
                                               className="dash-meal-else-log"
                                               onClick={() => void logActualMealForSlot(slotIndex)}
-                                              disabled={mealElseSlots[slotIndex]?.logging || !todayLog?.id}
+                                              disabled={mealElseSlots[slotIndex]?.logging || !displayLog?.id}
                                             >
                                               {mealElseSlots[slotIndex]?.logging ? 'Saving…' : 'Log anyway'}
                                             </button>
@@ -3355,7 +3570,7 @@ export default function Dashboard() {
                         type="button"
                         className="dash-meal-planner-save"
                         onClick={() => void saveMealPlanToLog()}
-                        disabled={mealPlanSaveBusy || !todayLog?.id}
+                        disabled={mealPlanSaveBusy || !displayLog?.id}
                       >
                         {mealPlanSaveBusy ? 'Saving…' : 'Save to today’s log'}
                       </button>
@@ -3419,10 +3634,7 @@ export default function Dashboard() {
                 <button
                   type="button"
                   className="dash-btn-secondary"
-                  disabled={
-                    viewDate !== calendarToday ||
-                    (recoveryWeekBlocked && !displayLog.is_recovery_day)
-                  }
+                  disabled={recoveryWeekBlocked && !displayLog.is_recovery_day}
                   onClick={() => void toggleRecoveryDay()}
                 >
                   Mark as Recovery Day
@@ -3741,6 +3953,44 @@ export default function Dashboard() {
                 )
               })}
             </div>
+            <h3 className="dash-section-title" style={{ fontSize: '1rem', marginTop: '1rem' }}>
+              Missing logs
+            </h3>
+            {missingLogDates.length === 0 ? (
+              <p className="dash-missing-logs-all">All days logged ✓</p>
+            ) : (
+              <div className="dash-missing-logs">
+                <p className="dash-muted" style={{ marginBottom: '0.65rem' }}>
+                  You have {missingLogDates.length} {missingLogDates.length === 1 ? 'day' : 'days'} with no log
+                </p>
+                <ul className="dash-missing-logs-list">
+                  {(showAllMissingLogs ? missingLogDates : missingLogDates.slice(0, 10)).map((iso) => (
+                    <li key={iso} className="dash-missing-logs-item">
+                      <span className="dash-missing-logs-date">{iso}</span>
+                      <button
+                        type="button"
+                        className="dash-missing-logs-btn"
+                        onClick={() => {
+                          setTab('today')
+                          setViewDate(iso)
+                        }}
+                      >
+                        Log this day
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+                {missingLogDates.length > 10 ? (
+                  <button
+                    type="button"
+                    className="dash-missing-logs-toggle"
+                    onClick={() => setShowAllMissingLogs((v) => !v)}
+                  >
+                    {showAllMissingLogs ? 'Show less' : 'Show all'}
+                  </button>
+                ) : null}
+              </div>
+            )}
             {selectedProgressDate ? (
               <div className="dash-day-notes-panel">
                 <p className="dash-day-notes-title">Day notes · {selectedProgressDate}</p>
@@ -3790,16 +4040,30 @@ export default function Dashboard() {
             <div className="dash-recent">
               {progressRecent7.map(({ key, log }) => (
                 <div key={key} className="dash-recent-row">
-                  <p className="dash-recent-date">
-                    {key}
-                    {key === todayLocalISO() ? ' · Today' : ''}
-                  </p>
-                  <p className="dash-recent-tasks">
-                    {taskBreakdownLine(log, challengeType)}
-                    {log?.reading_log?.book_title
-                      ? ` · 📖 ${String(log.reading_log.book_title).trim()}`
-                      : ''}
-                  </p>
+                  <div className="dash-recent-row-main">
+                    <p className="dash-recent-date">
+                      {key}
+                      {key === todayLocalISO() ? ' · Today' : ''}
+                    </p>
+                    <p className="dash-recent-tasks">
+                      {taskBreakdownLine(log, challengeType)}
+                      {log?.reading_log?.book_title
+                        ? ` · 📖 ${String(log.reading_log.book_title).trim()}`
+                        : ''}
+                    </p>
+                  </div>
+                  {key >= progressEditRangeStart && key <= todayLocalISO() ? (
+                    <button
+                      type="button"
+                      className="dash-recent-edit"
+                      onClick={() => {
+                        setTab('today')
+                        setViewDate(key)
+                      }}
+                    >
+                      Edit
+                    </button>
+                  ) : null}
                 </div>
               ))}
             </div>
@@ -3829,6 +4093,26 @@ export default function Dashboard() {
                 <span className="dash-profile-label">Start date</span>
                 <span className="dash-profile-value">{profile.start_date ?? '—'}</span>
               </div>
+              {/* NEW */}
+              {profile.city && (
+                <div className="dash-profile-row">
+                  <span className="dash-profile-label">City</span>
+                  <span className="dash-profile-value">{profile.city}</span>
+                </div>
+              )}
+              {/* NEW */}
+              {profile.fitness_interests?.length > 0 && (
+                <div className="dash-profile-row dash-profile-row--interests">
+                  <span className="dash-profile-label">Interests</span>
+                  <div className="dash-profile-interests">
+                    {profile.fitness_interests.map((interest) => (
+                      <span key={interest} className="dash-interest-chip">
+                        {interest}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div className="dash-profile-row">
                 <span className="dash-profile-label">Age</span>
                 <span className="dash-profile-value">{profile.age ?? '—'}</span>

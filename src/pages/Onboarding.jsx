@@ -30,6 +30,22 @@ const RESTRICTION_OPTIONS = [
   'No chicken',
 ]
 
+// NEW
+const FITNESS_INTEREST_OPTIONS = [
+  'Running',
+  'Hyrox',
+  'Ironman / Triathlon',
+  'Marathon',
+  'Trekking / Hiking',
+  'Strength training',
+  'Cycling',
+  'Swimming',
+  'Yoga / Mobility',
+  'Combat sports',
+  'CrossFit',
+  'General fitness',
+]
+
 function todayLocalISO() {
   const d = new Date()
   const y = d.getFullYear()
@@ -99,6 +115,10 @@ export default function Onboarding() {
   const [heightIn, setHeightIn] = useState('')
   const [ageField, setAgeField] = useState('')
 
+  // NEW
+  const [fitnessInterests, setFitnessInterests] = useState([])
+  const [city, setCity] = useState('')
+
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
 
@@ -167,6 +187,13 @@ export default function Onboarding() {
 
   const toggleRestriction = useCallback((label) => {
     setRestrictions((prev) =>
+      prev.includes(label) ? prev.filter((x) => x !== label) : [...prev, label]
+    )
+  }, [])
+
+  // NEW
+  const toggleFitnessInterest = useCallback((label) => {
+    setFitnessInterests((prev) =>
       prev.includes(label) ? prev.filter((x) => x !== label) : [...prev, label]
     )
   }, [])
@@ -251,6 +278,9 @@ export default function Onboarding() {
       start_date: startDate,
       challenge_type: soft ? CHALLENGE_75_SOFT : CHALLENGE_75_HARD,
       macros,
+      // NEW
+      fitness_interests: fitnessInterests.length ? fitnessInterests : [],
+      city: city.trim() || null,
     }
     const { error: saveError } = await supabase
       .from('user_profiles')
@@ -405,6 +435,45 @@ export default function Onboarding() {
                   </button>
                 ))}
               </div>
+            </div>
+
+            {/* NEW — fitness interests */}
+            <div className="onboarding-field">
+              <div className="onboarding-field-heading" id="interests-heading">
+                Fitness interests
+              </div>
+              <p className="onboarding-desc" style={{ marginBottom: '0.65rem' }}>
+                What do you train for? Pick all that apply.
+              </p>
+              <div
+                className="onboarding-btn-group"
+                role="group"
+                aria-labelledby="interests-heading"
+              >
+                {FITNESS_INTEREST_OPTIONS.map((opt) => (
+                  <button
+                    key={opt}
+                    type="button"
+                    className={`onboarding-chip ${fitnessInterests.includes(opt) ? 'onboarding-chip--selected' : ''}`}
+                    onClick={() => toggleFitnessInterest(opt)}
+                  >
+                    {opt}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* NEW — city */}
+            <div className="onboarding-field">
+              <label htmlFor="city">Your city</label>
+              <input
+                id="city"
+                className="onboarding-input"
+                type="text"
+                placeholder="e.g. Bengaluru"
+                value={city}
+                onChange={(e) => setCity(e.target.value)}
+              />
             </div>
 
             <div className="onboarding-actions onboarding-actions--single">

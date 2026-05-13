@@ -1820,18 +1820,6 @@
   margin-top: 0.5rem;
 }
 
-.dash-recent-row {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  padding: 0.65rem 0;
-  border-bottom: 1px solid #222;
-}
-
-.dash-recent-row:last-child {
-  border-bottom: none;
-}
-
 .dash-recent-date {
   font-size: 0.85rem;
   font-weight: 600;
@@ -3089,6 +3077,28 @@
   border-bottom: none;
 }
 
+.dash-profile-row--interests {
+  align-items: flex-start;
+}
+
+.dash-profile-interests {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.dash-interest-chip {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
+  background: rgba(224, 123, 57, 0.15);
+  color: #e07b39;
+  border: 1px solid rgba(224, 123, 57, 0.3);
+}
+
 .dash-profile-label {
   font-size: 0.78rem;
   font-weight: 600;
@@ -3142,6 +3152,190 @@
 .dash-profile-switch-link:hover {
   border-color: #64748b;
   color: #bfdbfe;
+}
+
+.dash-edit-day-banner {
+  margin-bottom: 0.75rem;
+  padding: 0.55rem 0.75rem;
+  border-radius: 10px;
+  border: 1px solid rgba(245, 200, 66, 0.45);
+  background: rgba(245, 200, 66, 0.12);
+  color: #f5c842;
+  font-size: 0.88rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+.dash-date-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.65rem;
+  margin-bottom: 0.85rem;
+  position: relative;
+}
+
+.dash-date-nav-btn {
+  font-family: inherit;
+  font-size: 1.15rem;
+  font-weight: 700;
+  line-height: 1;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 10px;
+  border: 1px solid #444;
+  background: #1a1a1a;
+  color: #fafafa;
+  cursor: pointer;
+}
+
+.dash-date-nav-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.dash-date-nav-cal {
+  font-family: inherit;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0.35rem 0.5rem;
+  border-radius: 10px;
+  border: 1px solid #444;
+  background: #1a1a1a;
+  cursor: pointer;
+}
+
+.dash-date-nav-picker {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.dash-gentle-unlogged-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: 10px;
+  border: 1px solid #444;
+  background: rgba(147, 197, 253, 0.08);
+}
+
+.dash-gentle-unlogged-banner-text {
+  margin: 0;
+  font-size: 0.84rem;
+  line-height: 1.45;
+  color: #b5c9e6;
+  flex: 1;
+}
+
+.dash-gentle-unlogged-banner-dismiss {
+  flex-shrink: 0;
+  font-family: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0.35rem 0.55rem;
+  border-radius: 8px;
+  border: 1px solid #4a5568;
+  background: #1f1f1f;
+  color: #cbd5e1;
+  cursor: pointer;
+}
+
+.dash-missing-logs-all {
+  margin: 0 0 1rem;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #6abf5e;
+}
+
+.dash-missing-logs-list {
+  list-style: none;
+  margin: 0 0 0.65rem;
+  padding: 0;
+}
+
+.dash-missing-logs-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+  padding: 0.45rem 0;
+  border-bottom: 1px solid #252525;
+}
+
+.dash-missing-logs-item:last-child {
+  border-bottom: none;
+}
+
+.dash-missing-logs-date {
+  font-size: 0.82rem;
+  color: #c4c4c4;
+}
+
+.dash-missing-logs-btn {
+  flex-shrink: 0;
+  font-family: inherit;
+  font-size: 0.76rem;
+  font-weight: 600;
+  padding: 0.35rem 0.55rem;
+  border-radius: 8px;
+  border: 1px solid #e07b39;
+  background: rgba(224, 123, 57, 0.12);
+  color: #ffb37a;
+  cursor: pointer;
+}
+
+.dash-missing-logs-toggle {
+  font-family: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0.4rem 0.65rem;
+  border-radius: 8px;
+  border: 1px solid #444;
+  background: #1a1a1a;
+  color: #ccc;
+  cursor: pointer;
+}
+
+.dash-recent-row {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.65rem;
+  padding: 0.65rem 0;
+  border-bottom: 1px solid #222;
+}
+
+.dash-recent-row:last-child {
+  border-bottom: none;
+}
+
+.dash-recent-row-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.dash-recent-edit {
+  flex-shrink: 0;
+  font-family: inherit;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0;
+  border: none;
+  background: none;
+  color: #93c5fd;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
 }
 
 @media (max-width: 360px) {
