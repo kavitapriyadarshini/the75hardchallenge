@@ -961,6 +961,10 @@ export default function Dashboard() {
     viewDateRef.current = viewDate
   }, [viewDate])
 
+  const calendarToday = todayLocalISO()
+  const displayLog =
+    viewDate === calendarToday ? todayLog : pastViewLog ?? emptyDayLog(viewDate)
+
   useEffect(() => {
     if (!displayLog?.meal_plan) return
     const plan = displayLog.meal_plan
@@ -1004,10 +1008,6 @@ export default function Dashboard() {
   const challengeHeaderClass = is75Soft(challengeType) ? 'dash-logo--soft' : 'dash-logo--hard'
   const waterTarget = useMemo(() => waterTargetMl(challengeType), [challengeType])
   const taskSegments = useMemo(() => challengeTaskCount(challengeType), [challengeType])
-
-  const calendarToday = todayLocalISO()
-  const displayLog =
-    viewDate === calendarToday ? todayLog : pastViewLog ?? emptyDayLog(viewDate)
 
   const dayOf75View = useMemo(
     () => challengeDayNumber(startDateStr, viewDate),

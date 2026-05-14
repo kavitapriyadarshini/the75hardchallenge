@@ -1,5 +1,7 @@
 /** 3 variants per slot × 5 slots × diet keys. Each line ends with macro token for UI parsing. */
-const M = (p, c, f, k) => ` [P:${p}g C:${c}g F:${f}g ~${k}kcal]`
+function M(p, c, f, k) {
+  return ` [P:${p}g C:${c}g F:${f}g ~${k}kcal]`
+}
 
 export const MEAL_SLOT_ORDER = ['preWorkout', 'breakfast', 'lunch', 'snack', 'dinner']
 
