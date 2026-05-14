@@ -180,6 +180,21 @@ export function recoveryDayUsedElsewhereInWeek(allLogs, viewDateStr, currentLogD
   return false
 }
 
+const CHALLENGE_DAY_COUNT = 75
+
+function parseISODateLocalChallenge(iso) {
+  const [yy, mm, dd] = String(iso).split('-').map(Number)
+  return new Date(yy, mm - 1, dd)
+}
+
+/** Calendar day index within the challenge (1–75) for `dateStr` relative to `startDateStr`. */
+export function challengeDayNumber(startDateStr, dateStr) {
+  const s = parseISODateLocalChallenge(startDateStr)
+  const v = parseISODateLocalChallenge(dateStr)
+  const diff = Math.round((v - s) / 86400000)
+  return Math.min(CHALLENGE_DAY_COUNT, Math.max(1, diff + 1))
+}
+
 /** Yesterday was a failing day for 75 Hard (missed requirements or no log when past day-1 grace). */
 export function dayFailsHardRules(logOrNull, attemptAgeDays, challengeType) {
   if (is75Soft(challengeType)) return false
@@ -209,12 +224,6 @@ export function summarizeAttemptThrough(activeAttempt, throughDateStr, logsByDat
     const m = String(d.getMonth() + 1).padStart(2, '0')
     const day = String(d.getDate()).padStart(2, '0')
     return `${y}-${m}-${day}`
-  }
-  const challengeDayNumber = (startDateStr, todayStr) => {
-    const s = parseISODateLocal(startDateStr)
-    const t = parseISODateLocal(todayStr)
-    const diff = Math.round((t - s) / 86400000)
-    return Math.min(CHALLENGE_DAYS, Math.max(1, diff + 1))
   }
   const through = minDateStr(throughDateStr, addDaysISO(start, 74))
   let perfect = 0

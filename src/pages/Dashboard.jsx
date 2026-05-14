@@ -29,6 +29,7 @@ import {
   waterMilestoneMessage,
   summarizeAttemptThrough,
   recoveryDayUsedElsewhereInWeek,
+  challengeDayNumber,
 } from '../lib/challenge'
 import './dashboard.css'
 
@@ -370,13 +371,6 @@ function formatLocalDate(d) {
   return `${y}-${m}-${day}`
 }
 
-function challengeDayNumber(startDateStr, todayStr) {
-  const start = parseISODateLocal(startDateStr)
-  const today = parseISODateLocal(todayStr)
-  const diff = Math.round((today - start) / 86400000)
-  return Math.min(CHALLENGE_DAYS, Math.max(1, diff + 1))
-}
-
 function typeBadgeClass(type) {
   if (type === 'cardio') return 'dash-type-badge dash-type-cardio'
   if (type === 'strength') return 'dash-type-badge dash-type-strength'
@@ -412,13 +406,6 @@ function addDaysISO(iso, delta) {
   const d = parseISODateLocal(iso)
   d.setDate(d.getDate() + delta)
   return formatLocalDate(d)
-}
-
-/** Whole calendar days from `isoEarlier` to `isoLater` (non-negative when earlier <= later). */
-function calendarDaysSince(isoEarlier, isoLater) {
-  const a = parseISODateLocal(isoEarlier)
-  const b = parseISODateLocal(isoLater)
-  return Math.round((b - a) / 86400000)
 }
 
 function minDateStr(a, b) {
@@ -892,7 +879,7 @@ export default function Dashboard() {
   const [, setPastLogLoading] = useState(false)
   const [attempts, setAttempts] = useState([])
   const [progressAttemptId, setProgressAttemptId] = useState(null)
-  const [restartFailureModal, setRestartFailureModal] = useState(null)
+  const [missedUnloggedModal, setMissedUnloggedModal] = useState(null)
   const [restartBusy, setRestartBusy] = useState(false)
   const [challengeSwitchOpen, setChallengeSwitchOpen] = useState(false)
   const [challengeSwitchBusy, setChallengeSwitchBusy] = useState(false)
@@ -906,7 +893,11 @@ export default function Dashboard() {
   const [mealElseSlots, setMealElseSlots] = useState(createInitialMealElseSlots)
   const [mealElseRestartBusy, setMealElseRestartBusy] = useState(false)
   const [attemptBannerMessage, setAttemptBannerMessage] = useState('')
-  const [gentleUnloggedBanner, setGentleUnloggedBanner] = useState(false)
+  const [pendingScrollToMissing, setPendingScrollToMissing] = useState(false)
+  const [profileStartDateEditOpen, setProfileStartDateEditOpen] = useState(false)
+  const [profileStartDateDraft, setProfileStartDateDraft] = useState('')
+  const [profileStartDateBusy, setProfileStartDateBusy] = useState(false)
+  const [profileStartDateConfirm, setProfileStartDateConfirm] = useState('')
   const [showAllMissingLogs, setShowAllMissingLogs] = useState(false)
   const [macroRecalibratedToast, setMacroRecalibratedToast] = useState('')
   const [activeLogEditSlot, setActiveLogEditSlot] = useState(null)
@@ -935,6 +926,7 @@ export default function Dashboard() {
   const [assigningSlot, setAssigningSlot] = useState(null)
   const [selectedProgressDate, setSelectedProgressDate] = useState(null)
   const progressPhotoInputRef = useRef(null)
+  const missingLogsSectionRef = useRef(null)
   const workoutsScrollTopRef = useRef(null)
   const workoutListAnchorRef = useRef(null)
   const mealElseSlotsRef = useRef(mealElseSlots)
@@ -1247,7 +1239,6 @@ export default function Dashboard() {
 
   const load = useCallback(async () => {
     setLoadError('')
-    setGentleUnloggedBanner(false)
     const t = todayLocalISO()
     setTodayStr(t)
 
@@ -1418,33 +1409,37 @@ export default function Dashboard() {
     await refreshReadingBooks(uid)
 
     const activeOnly = (attRows ?? []).find((a) => !a.ended_at)
-    if (!is75Soft(ctLoad) && activeOnly && t !== activeOnly.start_date) {
+    const onboardingDone = nextProfile?.onboarding_complete === true
+    if (onboardingDone && !is75Soft(ctLoad) && activeOnly) {
       const map = new Map((logsData ?? []).map((r) => [r.date, r]))
       const start = activeOnly.start_date
       const yest = addDaysISO(t, -1)
-      let firstMiss = null
-      if (yest >= start) {
-        for (let d = yest; d >= start; d = addDaysISO(d, -1)) {
-          if (!map.get(d)) {
-            firstMiss = d
+      if (t !== start && yest >= start && !map.get(yest)) {
+        let anyPrior = false
+        for (let d = start; d <= yest; d = addDaysISO(d, 1)) {
+          if (map.get(d)) {
+            anyPrior = true
             break
           }
         }
-      }
-      if (firstMiss) {
-        const gap = calendarDaysSince(firstMiss, t)
-        if (gap <= 3) {
-          const nums = (attRows ?? []).map((a) => a.attempt_number)
-          const nextNum = (nums.length ? Math.max(...nums) : 0) + 1
-          setRestartFailureModal({
-            missedDate: firstMiss,
-            missedLabels: ['No daily log recorded'],
-            nextAttemptNum: nextNum,
-            prevStats: summarizeAttemptThrough(activeOnly, addDaysISO(firstMiss, -1), map, ctLoad),
-            prevAttemptNumber: activeOnly.attempt_number,
-          })
-        } else {
-          setGentleUnloggedBanner(true)
+        if (anyPrior) {
+          const lsKey = `75hard_missed_modal_${yest}`
+          if (!window.localStorage.getItem(lsKey)) {
+            const missedList = []
+            for (let d = start; d <= yest; d = addDaysISO(d, 1)) {
+              if (!map.get(d)) missedList.push(d)
+            }
+            const nums = (attRows ?? []).map((a) => a.attempt_number)
+            const nextNum = (nums.length ? Math.max(...nums) : 0) + 1
+            setMissedUnloggedModal({
+              step: 'choice',
+              triggerDate: yest,
+              missedDates: missedList,
+              nextAttemptNum: nextNum,
+              prevStats: summarizeAttemptThrough(activeOnly, addDaysISO(yest, -1), map, ctLoad),
+              prevAttemptNumber: activeOnly.attempt_number,
+            })
+          }
         }
       }
     }
@@ -1668,8 +1663,46 @@ export default function Dashboard() {
       setLoadError(res.message)
       return
     }
-    setRestartFailureModal(null)
+    setMissedUnloggedModal(null)
   }, [executeChallengeRestart])
+
+  const saveProfileStartDate = useCallback(async () => {
+    const uid = userIdRef.current
+    const active = attempts.find((a) => !a.ended_at)
+    if (!uid || !active?.id || !profile) return
+    const d = profileStartDateDraft
+    const today = todayLocalISO()
+    const minD = addDaysISO(today, -74)
+    if (!d || d < minD || d > today) {
+      setLoadError('Choose a valid start date (up to 74 days ago, not in the future).')
+      return
+    }
+    setProfileStartDateBusy(true)
+    setLoadError('')
+    const { error: e1 } = await supabase.from('user_profiles').update({ start_date: d }).eq('user_id', uid)
+    const { error: e2 } = await supabase.from('attempts').update({ start_date: d }).eq('id', active.id)
+    setProfileStartDateBusy(false)
+    if (e1 || e2) {
+      setLoadError(e1?.message || e2?.message || 'Could not update start date.')
+      return
+    }
+    setProfile((p) => (p ? { ...p, start_date: d } : p))
+    setAttempts((prev) => prev.map((a) => (a.id === active.id ? { ...a, start_date: d } : a)))
+    setProfileStartDateEditOpen(false)
+    const dayNum = challengeDayNumber(d, today)
+    setProfileStartDateConfirm(`You're now on Day ${dayNum}.`)
+    window.setTimeout(() => setProfileStartDateConfirm(''), 6000)
+    await refreshAllLogs(uid)
+  }, [attempts, profile, profileStartDateDraft, refreshAllLogs])
+
+  useEffect(() => {
+    if (tab !== 'progress' || !pendingScrollToMissing) return undefined
+    const tid = window.setTimeout(() => {
+      missingLogsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      setPendingScrollToMissing(false)
+    }, 120)
+    return () => window.clearTimeout(tid)
+  }, [tab, pendingScrollToMissing])
 
   const handleUpgradeTo75HardFromSoftBanner = async () => {
     setChallengeSwitchBusy(true)
@@ -1958,38 +1991,11 @@ export default function Dashboard() {
     e.target.value = ''
     if (!file || !file.type.startsWith('image/')) return
     const uid = userIdRef.current
-    const t0 = todayLocalISO()
+    const targetDate = viewDateRef.current || todayLocalISO()
     if (!uid) return
 
-    let row = todayLogRef.current
-    if (!row?.id || row.date !== t0) {
-      const { data: existing } = await supabase
-        .from('daily_logs')
-        .select('*')
-        .eq('user_id', uid)
-        .eq('date', t0)
-        .maybeSingle()
-      row = existing
-    }
-    if (!row?.id) {
-      const { data: ins, error: insErr } = await supabase
-        .from('daily_logs')
-        .insert({ user_id: uid, date: t0 })
-        .select('*')
-        .single()
-      if (insErr || !ins) {
-        const { data: again } = await supabase
-          .from('daily_logs')
-          .select('*')
-          .eq('user_id', uid)
-          .eq('date', t0)
-          .maybeSingle()
-        row = again
-      } else {
-        row = ins
-      }
-    }
-    if (!row?.id) return
+    const { row: row0, error: e0 } = await ensureDailyLogForView()
+    if (e0 || !row0?.id) return
 
     setProgressPhotoBusy(true)
     setLoadError('')
@@ -1999,14 +2005,20 @@ export default function Dashboard() {
         setLoadError('Image is still too large after resize. Try a smaller photo.')
         return
       }
-      const { error } = await supabase.from('daily_logs').update({ progress_photo: dataUrl }).eq('id', row.id)
+      const { error } = await supabase.from('daily_logs').update({ progress_photo: dataUrl }).eq('id', row0.id)
       if (error) {
         setLoadError(error.message || 'Upload failed')
         return
       }
-      const merged = { ...row, progress_photo: dataUrl }
-      todayLogRef.current = merged
-      setTodayLog(merged)
+      const merged = { ...row0, progress_photo: dataUrl }
+      const cal = todayLocalISO()
+      if (targetDate === cal) {
+        todayLogRef.current = merged
+        setTodayLog(merged)
+      } else {
+        pastViewLogRef.current = merged
+        setPastViewLog(merged)
+      }
       setAllLogs((logs) => {
         const idx = logs.findIndex((r) => r.id === merged.id)
         if (idx === -1) return [...logs, merged].sort((a, b) => a.date.localeCompare(b.date))
@@ -2415,8 +2427,9 @@ export default function Dashboard() {
   }
 
   useEffect(() => {
-    if (viewDate !== calendarToday) return
-    const cur = todayLogRef.current
+    const vd = viewDateRef.current
+    if (vd > calendarToday) return
+    const cur = vd === calendarToday ? todayLogRef.current : pastViewLogRef.current
     if (!cur?.id) return
     const patch = {}
     if ((cur.actual_meals?.length ?? 0) >= 3 && !hasNonCleanMeal && !cur.diet_done) patch.diet_done = true
@@ -2430,9 +2443,13 @@ export default function Dashboard() {
     viewDate,
     calendarToday,
     todayLog?.id,
+    pastViewLog?.id,
     todayLog?.actual_meals,
+    pastViewLog?.actual_meals,
     todayLog?.progress_photo,
+    pastViewLog?.progress_photo,
     todayLog?.water_ml,
+    pastViewLog?.water_ml,
     hasNonCleanMeal,
     persistLogPatch,
     challengeType,
@@ -2601,20 +2618,6 @@ export default function Dashboard() {
           </p>
         ) : null}
         {loadError ? <p className="dash-error">{loadError}</p> : null}
-        {gentleUnloggedBanner ? (
-          <div className="dash-gentle-unlogged-banner" role="status">
-            <p className="dash-gentle-unlogged-banner-text">
-              You have unlogged days — backfill them from the Progress tab to keep your challenge valid.
-            </p>
-            <button
-              type="button"
-              className="dash-gentle-unlogged-banner-dismiss"
-              onClick={() => setGentleUnloggedBanner(false)}
-            >
-              Dismiss
-            </button>
-          </div>
-        ) : null}
 
         {tab === 'today' && profile && displayLog && (
           <>
@@ -3901,6 +3904,57 @@ export default function Dashboard() {
               </p>
             ) : null}
 
+            <section
+              ref={missingLogsSectionRef}
+              className="dash-missing-logs-section"
+              aria-labelledby="missing-logs-heading"
+            >
+              <h3 id="missing-logs-heading" className="dash-section-title" style={{ fontSize: '1rem' }}>
+                Missing logs
+              </h3>
+              {missingLogDates.length === 0 ? (
+                <p className="dash-missing-logs-all">All days logged ✓</p>
+              ) : (
+                <div className="dash-missing-logs">
+                  <p className="dash-missing-logs-count" role="status">
+                    {missingLogDates.length} {missingLogDates.length === 1 ? 'day' : 'days'} to backfill
+                  </p>
+                  <ul className="dash-missing-logs-list">
+                    {(showAllMissingLogs ? missingLogDates : missingLogDates.slice(0, 10)).map((iso) => {
+                      const startForDay = progressScopedAttempt?.start_date ?? startDateStr
+                      const dayNum = challengeDayNumber(startForDay, iso)
+                      return (
+                        <li key={iso} className="dash-missing-logs-item">
+                          <span className="dash-missing-logs-date">
+                            Day {dayNum} — {iso}
+                          </span>
+                          <button
+                            type="button"
+                            className="dash-missing-logs-btn"
+                            onClick={() => {
+                              setTab('today')
+                              setViewDate(iso)
+                            }}
+                          >
+                            Log this day
+                          </button>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                  {missingLogDates.length > 10 ? (
+                    <button
+                      type="button"
+                      className="dash-missing-logs-toggle"
+                      onClick={() => setShowAllMissingLogs((v) => !v)}
+                    >
+                      {showAllMissingLogs ? 'Show less' : 'Show all'}
+                    </button>
+                  ) : null}
+                </div>
+              )}
+            </section>
+
             <div className="dash-stat-grid dash-stat-grid--three">
               <div className="dash-stat">
                 <p className="dash-stat-value">{progressStats.currentDay}</p>
@@ -3953,44 +4007,6 @@ export default function Dashboard() {
                 )
               })}
             </div>
-            <h3 className="dash-section-title" style={{ fontSize: '1rem', marginTop: '1rem' }}>
-              Missing logs
-            </h3>
-            {missingLogDates.length === 0 ? (
-              <p className="dash-missing-logs-all">All days logged ✓</p>
-            ) : (
-              <div className="dash-missing-logs">
-                <p className="dash-muted" style={{ marginBottom: '0.65rem' }}>
-                  You have {missingLogDates.length} {missingLogDates.length === 1 ? 'day' : 'days'} with no log
-                </p>
-                <ul className="dash-missing-logs-list">
-                  {(showAllMissingLogs ? missingLogDates : missingLogDates.slice(0, 10)).map((iso) => (
-                    <li key={iso} className="dash-missing-logs-item">
-                      <span className="dash-missing-logs-date">{iso}</span>
-                      <button
-                        type="button"
-                        className="dash-missing-logs-btn"
-                        onClick={() => {
-                          setTab('today')
-                          setViewDate(iso)
-                        }}
-                      >
-                        Log this day
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-                {missingLogDates.length > 10 ? (
-                  <button
-                    type="button"
-                    className="dash-missing-logs-toggle"
-                    onClick={() => setShowAllMissingLogs((v) => !v)}
-                  >
-                    {showAllMissingLogs ? 'Show less' : 'Show all'}
-                  </button>
-                ) : null}
-              </div>
-            )}
             {selectedProgressDate ? (
               <div className="dash-day-notes-panel">
                 <p className="dash-day-notes-title">Day notes · {selectedProgressDate}</p>
@@ -4074,6 +4090,11 @@ export default function Dashboard() {
           <>
             <h1 className="dash-section-title">Profile</h1>
             <p className="dash-muted">Your account and challenge.</p>
+            {profileStartDateConfirm ? (
+              <p className="dash-profile-day-confirm" role="status">
+                {profileStartDateConfirm}
+              </p>
+            ) : null}
             <div className="dash-profile-card">
               <div className="dash-profile-row">
                 <span className="dash-profile-label">Username</span>
@@ -4089,9 +4110,21 @@ export default function Dashboard() {
                   )}
                 </span>
               </div>
-              <div className="dash-profile-row">
+              <div className="dash-profile-row dash-profile-row--with-action">
                 <span className="dash-profile-label">Start date</span>
                 <span className="dash-profile-value">{profile.start_date ?? '—'}</span>
+                {activeAttempt && !activeAttempt.ended_at ? (
+                  <button
+                    type="button"
+                    className="dash-profile-inline-action"
+                    onClick={() => {
+                      setProfileStartDateDraft(profile.start_date || todayLocalISO())
+                      setProfileStartDateEditOpen(true)
+                    }}
+                  >
+                    Edit
+                  </button>
+                ) : null}
               </div>
               {/* NEW */}
               {profile.city && (
@@ -4128,6 +4161,55 @@ export default function Dashboard() {
           </>
         )}
       </main>
+
+      {profileStartDateEditOpen ? (
+        <div
+          className="dash-restart-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="edit-start-title"
+        >
+          <div className="dash-restart-panel">
+            <h2 id="edit-start-title" className="dash-restart-title">
+              Edit start date
+            </h2>
+            <p className="dash-restart-body">
+              Choose when your current attempt began (up to 74 days in the past). This updates your
+              profile and active attempt.
+            </p>
+            <label className="dash-reading-label" htmlFor="profile-start-date">
+              Start date
+            </label>
+            <input
+              id="profile-start-date"
+              type="date"
+              className="dash-reading-input"
+              min={addDaysISO(todayLocalISO(), -74)}
+              max={todayLocalISO()}
+              value={profileStartDateDraft}
+              onChange={(e) => setProfileStartDateDraft(e.target.value)}
+            />
+            <div className="dash-restart-actions-row" style={{ marginTop: '1rem' }}>
+              <button
+                type="button"
+                className="dash-meal-dirty-dismiss"
+                onClick={() => setProfileStartDateEditOpen(false)}
+                disabled={profileStartDateBusy}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="dash-restart-cta"
+                onClick={() => void saveProfileStartDate()}
+                disabled={profileStartDateBusy}
+              >
+                {profileStartDateBusy ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {challengeSwitchOpen ? (
         <div
@@ -4404,49 +4486,102 @@ export default function Dashboard() {
         </div>
       ) : null}
 
-      {restartFailureModal && !is75Soft(challengeType) ? (
+      {missedUnloggedModal && !is75Soft(challengeType) ? (
         <div
           className="dash-restart-overlay"
           role="alertdialog"
           aria-modal="true"
-          aria-labelledby="restart-title"
-          aria-describedby="restart-desc"
+          aria-labelledby="missed-logs-title"
+          aria-describedby="missed-logs-desc"
         >
-          <div className="dash-restart-panel">
-            <h2 id="restart-title" className="dash-restart-title">
-              Restart required
-            </h2>
-            <p id="restart-desc" className="dash-restart-body">
-              You missed a requirement on {formatLongDate(restartFailureModal.missedDate)}.
-              According to 75 Hard rules, you must restart.
-            </p>
-            <div className="dash-restart-block">
-              <p className="dash-restart-sub">What was missed</p>
-              <ul className="dash-restart-list">
-                {restartFailureModal.missedLabels.map((line) => (
-                  <li key={line}>{line}</li>
-                ))}
-              </ul>
-            </div>
-            {restartFailureModal.prevStats ? (
-              <div className="dash-restart-block">
-                <p className="dash-restart-sub">
-                  Your stats from Attempt #{restartFailureModal.prevAttemptNumber} (before restart)
+          <div className="dash-restart-panel dash-missed-modal-panel">
+            {missedUnloggedModal.step === 'choice' ? (
+              <>
+                <h2 id="missed-logs-title" className="dash-restart-title">
+                  You have unlogged days
+                </h2>
+                <p id="missed-logs-desc" className="dash-restart-body">
+                  We noticed you haven&apos;t logged{' '}
+                  {missedUnloggedModal.missedDates.length === 1 &&
+                  missedUnloggedModal.missedDates[0] === missedUnloggedModal.triggerDate
+                    ? 'yesterday'
+                    : `${missedUnloggedModal.missedDates.length} days`}
+                  . What would you like to do?
                 </p>
-                <ul className="dash-restart-list">
-                  <li>Day reached: {restartFailureModal.prevStats.dayReached} of 75</li>
-                  <li>Days fully completed: {restartFailureModal.prevStats.perfectDays}</li>
-                </ul>
-              </div>
-            ) : null}
-            <button
-              type="button"
-              className="dash-restart-cta"
-              onClick={performRestartAttempt}
-              disabled={restartBusy}
-            >
-              {restartBusy ? 'Working…' : `Start Attempt #${restartFailureModal.nextAttemptNum}`}
-            </button>
+                <div className="dash-missed-modal-actions">
+                  <button
+                    type="button"
+                    className="dash-missed-btn dash-missed-btn--primary"
+                    onClick={() => {
+                      window.localStorage.setItem(
+                        `75hard_missed_modal_${missedUnloggedModal.triggerDate}`,
+                        '1'
+                      )
+                      setMissedUnloggedModal(null)
+                      setTab('progress')
+                      setPendingScrollToMissing(true)
+                    }}
+                  >
+                    Log pending days
+                  </button>
+                  <button
+                    type="button"
+                    className="dash-missed-btn dash-missed-btn--restart-outline"
+                    onClick={() =>
+                      setMissedUnloggedModal((m) => (m ? { ...m, step: 'confirmRestart' } : m))
+                    }
+                  >
+                    Restart Challenge
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <h2 id="missed-logs-title" className="dash-restart-title">
+                  Restart challenge?
+                </h2>
+                <p id="missed-logs-desc" className="dash-restart-body">
+                  Are you sure? This will start a new attempt from today. Your previous attempt data is saved.
+                </p>
+                {missedUnloggedModal.prevStats ? (
+                  <div className="dash-restart-block">
+                    <p className="dash-restart-sub">
+                      Attempt #{missedUnloggedModal.prevAttemptNumber} so far
+                    </p>
+                    <ul className="dash-restart-list">
+                      <li>Day reached: {missedUnloggedModal.prevStats.dayReached} of 75</li>
+                      <li>Days fully completed: {missedUnloggedModal.prevStats.perfectDays}</li>
+                    </ul>
+                  </div>
+                ) : null}
+                <div className="dash-restart-actions-row">
+                  <button
+                    type="button"
+                    className="dash-meal-dirty-dismiss"
+                    onClick={() =>
+                      setMissedUnloggedModal((m) => (m ? { ...m, step: 'choice' } : m))
+                    }
+                    disabled={restartBusy}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="dash-restart-cta"
+                    onClick={() => {
+                      window.localStorage.setItem(
+                        `75hard_missed_modal_${missedUnloggedModal.triggerDate}`,
+                        '1'
+                      )
+                      void performRestartAttempt()
+                    }}
+                    disabled={restartBusy}
+                  >
+                    {restartBusy ? 'Working…' : 'Yes, restart'}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       ) : null}

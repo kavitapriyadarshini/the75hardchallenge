@@ -3154,13 +3154,95 @@
   color: #bfdbfe;
 }
 
+.dash-profile-row--with-action {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.75rem;
+}
+
+.dash-profile-inline-action {
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 0.2rem 0.45rem;
+  border: none;
+  background: transparent;
+  color: #93c5fd;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.dash-profile-inline-action:hover {
+  color: #bfdbfe;
+}
+
+.dash-profile-day-confirm {
+  margin: 0 0 0.65rem;
+  padding: 0.5rem 0.65rem;
+  border-radius: 8px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #4ade80;
+  background: rgba(74, 222, 128, 0.1);
+  border: 1px solid rgba(74, 222, 128, 0.35);
+}
+
+.dash-missed-modal-panel .dash-missed-modal-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  margin-top: 0.5rem;
+}
+
+.dash-missed-btn {
+  font-family: inherit;
+  font-size: 0.95rem;
+  font-weight: 600;
+  padding: 0.65rem 1rem;
+  border-radius: 10px;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+
+.dash-missed-btn--primary {
+  background: linear-gradient(180deg, #22c55e 0%, #16a34a 100%);
+  color: #0f172a;
+  border-color: #15803d;
+}
+
+.dash-missed-btn--primary:hover {
+  filter: brightness(1.05);
+}
+
+.dash-missed-btn--restart-outline {
+  background: transparent;
+  color: #f87171;
+  border: 1px solid rgba(248, 113, 113, 0.55);
+}
+
+.dash-missed-btn--restart-outline:hover {
+  background: rgba(248, 113, 113, 0.08);
+}
+
+.dash-missing-logs-section {
+  margin-bottom: 1.25rem;
+}
+
+.dash-missing-logs-count {
+  margin: 0 0 0.65rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #fcd34d;
+}
+
 .dash-edit-day-banner {
   margin-bottom: 0.75rem;
   padding: 0.55rem 0.75rem;
   border-radius: 10px;
-  border: 1px solid rgba(245, 200, 66, 0.45);
-  background: rgba(245, 200, 66, 0.12);
-  color: #f5c842;
+  border: 1px solid rgba(245, 158, 11, 0.55);
+  background: rgba(245, 158, 11, 0.18);
+  color: #fbbf24;
   font-size: 0.88rem;
   font-weight: 600;
   text-align: center;

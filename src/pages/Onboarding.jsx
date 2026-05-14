@@ -7,6 +7,7 @@ import {
   CHALLENGE_75_SOFT,
   normalizeChallengeType,
   is75Soft,
+  challengeDayNumber,
 } from '../lib/challenge'
 import './onboarding.css'
 
@@ -48,6 +49,15 @@ const FITNESS_INTEREST_OPTIONS = [
 
 function todayLocalISO() {
   const d = new Date()
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+function addDaysISO(iso, delta) {
+  const d = new Date(iso + 'T12:00:00')
+  d.setDate(d.getDate() + delta)
   const y = d.getFullYear()
   const m = String(d.getMonth() + 1).padStart(2, '0')
   const day = String(d.getDate()).padStart(2, '0')
@@ -103,6 +113,7 @@ export default function Onboarding() {
   const [user, setUser] = useState(null)
 
   const [step, setStep] = useState(1)
+  const [startMode, setStartMode] = useState('today')
   const [startDate, setStartDate] = useState(todayLocalISO)
   const [gender, setGender] = useState('female')
   const [dietType, setDietType] = useState('')
@@ -199,7 +210,14 @@ export default function Onboarding() {
   }, [])
 
   const validateStep1 = () => {
-    if (!startDate) {
+    if (startMode === 'already') {
+      const t0 = todayLocalISO()
+      const minD = addDaysISO(t0, -74)
+      if (!startDate || startDate < minD || startDate > t0) {
+        setError('Choose a valid start date (up to 74 days ago, not in the future).')
+        return false
+      }
+    } else if (!startDate) {
       setError('Choose a challenge start date.')
       return false
     }
@@ -281,6 +299,7 @@ export default function Onboarding() {
       // NEW
       fitness_interests: fitnessInterests.length ? fitnessInterests : [],
       city: city.trim() || null,
+      onboarding_complete: true,
     }
     const { error: saveError } = await supabase
       .from('user_profiles')
@@ -358,15 +377,63 @@ export default function Onboarding() {
             {error ? <p className="onboarding-error">{error}</p> : null}
 
             <div className="onboarding-field">
-              <label htmlFor="start-date">Challenge start date</label>
-              <input
-                id="start-date"
-                className="onboarding-input"
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-              />
+              <div className="onboarding-field-heading" id="start-mode-heading">
+                When did you start?
+              </div>
+              <div
+                className="onboarding-btn-group"
+                style={{ marginTop: '0.45rem' }}
+                role="group"
+                aria-labelledby="start-mode-heading"
+              >
+                <button
+                  type="button"
+                  className={`onboarding-chip ${startMode === 'today' ? 'onboarding-chip--selected' : ''}`}
+                  onClick={() => {
+                    setStartMode('today')
+                    setStartDate(todayLocalISO())
+                  }}
+                >
+                  Starting today
+                </button>
+                <button
+                  type="button"
+                  className={`onboarding-chip ${startMode === 'already' ? 'onboarding-chip--selected' : ''}`}
+                  onClick={() => {
+                    setStartMode('already')
+                    setStartDate((prev) => {
+                      const t0 = todayLocalISO()
+                      const minD = addDaysISO(t0, -74)
+                      if (prev && prev < t0 && prev >= minD) return prev
+                      return addDaysISO(t0, -1)
+                    })
+                  }}
+                >
+                  Already started
+                </button>
+              </div>
             </div>
+
+            {startMode === 'already' ? (
+              <div className="onboarding-field">
+                <label htmlFor="start-date">Challenge start date</label>
+                <input
+                  id="start-date"
+                  className="onboarding-input"
+                  type="date"
+                  min={addDaysISO(todayLocalISO(), -74)}
+                  max={todayLocalISO()}
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                />
+                {startDate ? (
+                  <p className="onboarding-backfill-hint">
+                    You&apos;re on Day {challengeDayNumber(startDate, todayLocalISO())} of 75 — backfill your
+                    logs after setup.
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
 
             <div className="onboarding-field">
               <div className="onboarding-field-heading" id="gender-heading">
