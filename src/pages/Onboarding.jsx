@@ -264,6 +264,7 @@ export default function Onboarding() {
       setError('Your account has no email. Sign out and sign in with a valid email.')
       return
     }
+    const displayName = user.email.split('@')[0]
     setSaving(true)
     setError('')
     const { weightKg: wKg, heightCm: hCm } = parseMetricBody(
@@ -283,6 +284,7 @@ export default function Onboarding() {
     const row = {
       user_id: user.id,
       email: emailTrim,
+      username: displayName,
       weight_kg: Math.round(wKg * 10) / 10,
       height_cm: Math.round(hCm * 10) / 10,
       age: Number(ageField),
