@@ -87,6 +87,52 @@ const MEAL_HEADER_PREFIX = [
   '🌙 Dinner (7:30 PM):',
 ]
 
+/** Plain-text slot headers (no emoji) — same slots as MEAL_HEADER_PREFIX. */
+const PLAIN_MEAL_SLOT_LINE_PREFIXES = [
+  'Pre-workout (6:30 AM):',
+  'Breakfast (8:30 AM):',
+  'Lunch (1:00 PM):',
+  'Snack (4:30 PM):',
+  'Dinner (7:30 PM):',
+]
+
+function stripLeadingSlotEmojis(s) {
+  let t = String(s ?? '')
+  const re = /^(\p{Extended_Pictographic}(?:\uFE0F|\u200D\p{Extended_Pictographic})*)\s*/u
+  for (let i = 0; i < 16; i += 1) {
+    const m = t.match(re)
+    if (!m) break
+    t = t.slice(m[0].length)
+  }
+  return t.trimStart()
+}
+
+function mealSlotTimeParensLookLikeHeader(inner) {
+  const t = String(inner ?? '').trim()
+  return /\b(am|pm)\b/i.test(t) || /\d{1,2}\s*:\s*\d{2}/.test(t)
+}
+
+/** Strip meal slot line prefix + leading emoji + macro tail so only food items remain (for parsing / textarea). */
+function stripMealSlotHeaderForParsing(raw) {
+  const trimmed = String(raw ?? '').trim()
+  if (!trimmed) return ''
+  let s = stripMacroSuffix(trimmed).body.trim()
+  s = stripLeadingSlotEmojis(s)
+  const known = [...MEAL_HEADER_PREFIX, ...PLAIN_MEAL_SLOT_LINE_PREFIXES].sort((a, b) => b.length - a.length)
+  for (const p of known) {
+    if (s.length >= p.length && s.slice(0, p.length).toLowerCase() === p.toLowerCase()) {
+      s = s.slice(p.length).trimStart()
+      break
+    }
+  }
+  const genericHeaderRe = /^[^\n:]+?\(([^)]+)\)\s*:\s*/i
+  const gm = s.match(genericHeaderRe)
+  if (gm && mealSlotTimeParensLookLikeHeader(gm[1])) {
+    s = s.replace(genericHeaderRe, '').trimStart()
+  }
+  return s.trim()
+}
+
 const WORKOUT_PREF_CHIPS = [
   'All',
   'Cardio',
@@ -745,7 +791,7 @@ function stripDuplicateConsecutiveWords(str) {
 
 /** Meal item label for UI: fix duplicated halves (e.g. "banana banana") without forcing lowercase. */
 function displayMealItemName(raw) {
-  let t = String(raw ?? '').trim()
+  let t = stripMealSlotHeaderForParsing(String(raw ?? '').trim())
   if (!t) return ''
   const words = t.split(/\s+/).filter(Boolean)
   if (words.length % 2 === 0) {
@@ -807,9 +853,17 @@ function sanitizeMealBreakdownForStorage(rows) {
 }
 
 function deterministicBreakdownFromItems(items, fallbackText) {
+  const cleanedFallback = stripMealSlotHeaderForParsing(fallbackText)
   const sourceItems = Array.isArray(items) && items.length
     ? items
-    : String(fallbackText ?? '')
+        .map((x) => {
+          const item = stripMealSlotHeaderForParsing(String(x.item ?? '').trim())
+          const qtyRaw = String(x.qty ?? x.item ?? '').trim()
+          const qty = stripMealSlotHeaderForParsing(qtyRaw) || qtyRaw
+          return { item: item || qty, qty: qty || item }
+        })
+        .filter((x) => String(x.item || x.qty || '').trim())
+    : cleanedFallback
         .split(/,|\+|\band\b|\bwith\b/gi)
         .map((s) => ({ item: s.trim(), qty: s.trim() }))
         .filter((x) => x.item)
@@ -2237,7 +2291,8 @@ export default function Dashboard() {
   }
 
   const calculateActualMealForSlot = async (slotIndex) => {
-    const draft = (mealElseSlotsRef.current[slotIndex]?.draft ?? '').trim()
+    const draftRaw = (mealElseSlotsRef.current[slotIndex]?.draft ?? '').trim()
+    const draft = stripMealSlotHeaderForParsing(draftRaw)
     if (!draft) return
     setMealElseSlots((prev) => {
       const n = [...prev]
@@ -2296,7 +2351,8 @@ export default function Dashboard() {
     if (e0 || !cur?.id) return
     const slot = mealElseSlotsRef.current[slotIndex]
     const analysis = slot?.result
-    const draft = (slot?.draft ?? '').trim()
+    const draftRaw = (slot?.draft ?? '').trim()
+    const draft = stripMealSlotHeaderForParsing(draftRaw)
     const soft = is75Soft(challengeType)
     if (!analysis || !draft) return
     if (!soft && !analysis.is_clean_diet) return
@@ -3399,7 +3455,7 @@ export default function Dashboard() {
                                           mode: loggedEntry.modified_from_suggestion
                                             ? 'edited'
                                             : 'custom',
-                                          draft: loggedEntry.description ?? '',
+                                          draft: stripMealSlotHeaderForParsing(loggedEntry.description ?? ''),
                                           result: null,
                                           breakdown: null,
                                           modifiedFromSuggestion:
@@ -3474,7 +3530,7 @@ export default function Dashboard() {
                                               ...n[slotIndex],
                                               expanded: true,
                                               mode: 'edited',
-                                              draft: body,
+                                              draft: stripMealSlotHeaderForParsing(body),
                                               result: null,
                                               breakdown: null,
                                               modifiedFromSuggestion: true,

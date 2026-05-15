@@ -899,11 +899,11 @@
   font-family: inherit;
   font-size: 0.82rem;
   font-weight: 600;
-  color: #0d0d0d;
-  background: #c4c4c4;
+  color: #fff;
+  background: #e07b39;
   border: none;
   border-radius: 8px;
-  padding: 0.5rem 0.65rem;
+  padding: 0.5rem 0.75rem;
   cursor: pointer;
 }
 
@@ -912,7 +912,7 @@
 }
 
 .dash-meal-else-calc:disabled {
-  opacity: 0.45;
+  opacity: 0.55;
   cursor: not-allowed;
 }
 
