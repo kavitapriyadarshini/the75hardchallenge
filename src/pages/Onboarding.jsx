@@ -9,6 +9,7 @@ import {
   is75Soft,
   challengeDayNumber,
 } from '../lib/challenge'
+import { friendlyDisplayFromEmail } from '../lib/emailDisplay'
 import './onboarding.css'
 
 const DIET_OPTIONS = [
@@ -150,16 +151,6 @@ export default function Onboarding() {
     }
   }, [navigate])
 
-  const username = useMemo(() => {
-    const meta = user?.user_metadata
-    if (meta?.display_name && String(meta.display_name).trim()) {
-      return String(meta.display_name).trim()
-    }
-    const email = user?.email
-    if (email && email.includes('@')) return email.split('@')[0]
-    return 'User'
-  }, [user])
-
   const { weightKg, heightCm } = useMemo(
     () =>
       parseMetricBody(
@@ -268,6 +259,11 @@ export default function Onboarding() {
 
   const handleStart = async () => {
     if (!validateStep2() || !macroPreview || !user) return
+    const emailTrim = user.email?.trim()
+    if (!emailTrim) {
+      setError('Your account has no email. Sign out and sign in with a valid email.')
+      return
+    }
     setSaving(true)
     setError('')
     const { weightKg: wKg, heightCm: hCm } = parseMetricBody(
@@ -286,7 +282,7 @@ export default function Onboarding() {
     }
     const row = {
       user_id: user.id,
-      username,
+      email: emailTrim,
       weight_kg: Math.round(wKg * 10) / 10,
       height_cm: Math.round(hCm * 10) / 10,
       age: Number(ageField),
@@ -367,6 +363,9 @@ export default function Onboarding() {
           {is75Soft(challengeType)
             ? 'Setting up your 75 SOFT journey'
             : 'Setting up your 75 HARD journey'}
+          {friendlyDisplayFromEmail(user?.email)
+            ? ` · ${friendlyDisplayFromEmail(user.email)}`
+            : ''}
         </p>
         {step === 1 && (
           <>

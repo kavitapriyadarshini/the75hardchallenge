@@ -8,10 +8,6 @@ function challengeTypeLooksValid(raw) {
   return t === '75hard' || t === '75soft'
 }
 
-function usernameToFakeEmail(raw) {
-  return `${raw.trim().toLowerCase()}@75hard.app`
-}
-
 function mapAuthError(error) {
   if (!error) return 'Something went wrong. Try again.'
   const msg = error.message?.toLowerCase() ?? ''
@@ -19,7 +15,7 @@ function mapAuthError(error) {
     msg.includes('invalid login credentials') ||
     msg.includes('invalid credentials')
   ) {
-    return 'Wrong username or password.'
+    return 'Wrong email or password.'
   }
   if (msg.includes('email not confirmed')) {
     return 'Please confirm your email before signing in.'
@@ -32,7 +28,7 @@ function mapAuthError(error) {
 
 export default function Login() {
   const navigate = useNavigate()
-  const [username, setUsername] = useState('')
+  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -40,18 +36,17 @@ export default function Login() {
   async function handleSubmit(e) {
     e.preventDefault()
     setError('')
-    const u = username.trim()
-    if (!u || !password) {
-      setError('Enter your username and password.')
+    const emailTrim = email.trim()
+    if (!emailTrim || !password) {
+      setError('Enter your email and password.')
       return
     }
 
     setLoading(true)
     try {
-      const email = usernameToFakeEmail(u)
       const { data, error: signError } =
         await supabase.auth.signInWithPassword({
-          email,
+          email: emailTrim,
           password,
         })
 
@@ -96,21 +91,21 @@ export default function Login() {
       <div className="auth-card">
         <p className="auth-brand">THE 75 CHALLENGE</p>
         <h1 className="auth-title">Welcome back</h1>
-        <p className="auth-sub">Sign in with your username and password.</p>
+        <p className="auth-sub">Sign in with your email and password.</p>
 
         <form onSubmit={handleSubmit} noValidate>
           {error ? <p className="auth-error">{error}</p> : null}
 
           <div className="auth-field">
-            <label htmlFor="login-username">Username</label>
+            <label htmlFor="login-email">Email</label>
             <input
-              id="login-username"
-              name="username"
-              type="text"
-              autoComplete="username"
-              placeholder="yourname"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
+              id="login-email"
+              name="email"
+              type="email"
+              autoComplete="email"
+              placeholder="you@example.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
               disabled={loading}
             />
           </div>

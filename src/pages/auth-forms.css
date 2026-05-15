@@ -79,6 +79,13 @@
   line-height: 1.4;
 }
 
+.auth-field-inline-error {
+  font-size: 0.8125rem;
+  color: #f87171;
+  margin: 0.35rem 0 0;
+  line-height: 1.35;
+}
+
 .auth-success {
   font-size: 0.875rem;
   color: #86efac;

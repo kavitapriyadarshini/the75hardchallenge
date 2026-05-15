@@ -89,14 +89,40 @@ const MEAL_HEADER_PREFIX = [
 
 const WORKOUT_PREF_CHIPS = [
   'All',
-  'Full Body',
+  'Cardio',
+  'Strength',
+  'Flexibility',
   'Upper Body',
   'Lower Body',
   'Core',
-  'Cardio',
-  'Flexibility',
+  'Full Body',
   'Recovery',
 ]
+
+function workoutMatchesWorkoutChip(w, chip) {
+  if (chip === 'All') return true
+  const targets = Array.isArray(w.targets) ? w.targets : []
+  switch (chip) {
+    case 'Cardio':
+      return w.type === 'cardio'
+    case 'Strength':
+      return w.type === 'strength'
+    case 'Flexibility':
+      return w.type === 'flexibility'
+    case 'Upper Body':
+      return targets.includes('upper')
+    case 'Lower Body':
+      return targets.includes('lower')
+    case 'Core':
+      return targets.includes('core')
+    case 'Full Body':
+      return targets.includes('full')
+    case 'Recovery':
+      return targets.includes('recovery')
+    default:
+      return true
+  }
+}
 
 function normalizeIngredientPhrase(raw) {
   let s = (raw ?? '').trim()
@@ -402,6 +428,47 @@ async function imageFileToJpegDataUrl(file, maxDim = 1280, quality = 0.82) {
   }
 }
 
+/** Approximate decoded byte length of a data URL (image payload). */
+function dataUrlByteLength(dataUrl) {
+  const idx = dataUrl.indexOf(',')
+  const base64 = idx === -1 ? dataUrl : dataUrl.slice(idx + 1)
+  const padding = base64.endsWith('==') ? 2 : base64.endsWith('=') ? 1 : 0
+  return Math.max(0, (base64.length * 3) / 4 - padding)
+}
+
+async function dataUrlToResizedJpegDataUrl(dataUrl, maxDim, quality) {
+  const img = new Image()
+  await new Promise((resolve, reject) => {
+    img.onload = resolve
+    img.onerror = () => reject(new Error('Could not read image'))
+    img.src = dataUrl
+  })
+  let { width, height } = img
+  const scale = Math.min(1, maxDim / Math.max(width, height, 1))
+  width = Math.round(width * scale)
+  height = Math.round(height * scale)
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error('No canvas')
+  ctx.drawImage(img, 0, 0, width, height)
+  return canvas.toDataURL('image/jpeg', quality)
+}
+
+/** Initial encode then shrink if over 500KB (800px max side, JPEG 0.7). */
+async function encodeProgressPhotoForStorage(file) {
+  const maxBytes = 500 * 1024
+  let dataUrl = await imageFileToJpegDataUrl(file, 1280, 0.82)
+  if (dataUrlByteLength(dataUrl) > maxBytes) {
+    dataUrl = await dataUrlToResizedJpegDataUrl(dataUrl, 800, 0.7)
+  }
+  if (dataUrlByteLength(dataUrl) > maxBytes) {
+    dataUrl = await dataUrlToResizedJpegDataUrl(dataUrl, 640, 0.65)
+  }
+  return dataUrl
+}
+
 function addDaysISO(iso, delta) {
   const d = parseISODateLocal(iso)
   d.setDate(d.getDate() + delta)
@@ -410,6 +477,13 @@ function addDaysISO(iso, delta) {
 
 function minDateStr(a, b) {
   return a <= b ? a : b
+}
+
+function isProgressPhotoValue(ph) {
+  if (ph == null || typeof ph !== 'string') return false
+  const t = ph.trim()
+  if (!t) return false
+  return t.startsWith('data:') || /^https?:\/\//i.test(t)
 }
 
 function emptyDayLog(date) {
@@ -900,6 +974,8 @@ export default function Dashboard() {
   const [profileStartDateConfirm, setProfileStartDateConfirm] = useState('')
   const [showAllMissingLogs, setShowAllMissingLogs] = useState(false)
   const [macroRecalibratedToast, setMacroRecalibratedToast] = useState('')
+  const [progressPhotoSaveToast, setProgressPhotoSaveToast] = useState('')
+  const [photoLightbox, setPhotoLightbox] = useState(null)
   const [activeLogEditSlot, setActiveLogEditSlot] = useState(null)
   const [showMealsBackCta, setShowMealsBackCta] = useState(false)
   const [showWorkoutsBackCta, setShowWorkoutsBackCta] = useState(false)
@@ -977,6 +1053,38 @@ export default function Dashboard() {
     const tid = window.setTimeout(() => setMacroRecalibratedToast(''), 4500)
     return () => window.clearTimeout(tid)
   }, [macroRecalibratedToast])
+
+  useEffect(() => {
+    if (!progressPhotoSaveToast) return undefined
+    const tid = window.setTimeout(() => setProgressPhotoSaveToast(''), 5000)
+    return () => window.clearTimeout(tid)
+  }, [progressPhotoSaveToast])
+
+  useEffect(() => {
+    if (!photoLightbox?.list?.length) return undefined
+    const onKey = (e) => {
+      if (e.key === 'Escape') {
+        setPhotoLightbox(null)
+        return
+      }
+      if (e.key === 'ArrowLeft') {
+        setPhotoLightbox((lb) => {
+          if (!lb?.list?.length) return lb
+          const n = lb.list.length
+          return { ...lb, index: (lb.index - 1 + n) % n }
+        })
+      }
+      if (e.key === 'ArrowRight') {
+        setPhotoLightbox((lb) => {
+          if (!lb?.list?.length) return lb
+          const n = lb.list.length
+          return { ...lb, index: (lb.index + 1) % n }
+        })
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [photoLightbox])
 
   const logsByDate = useMemo(() => {
     const m = new Map()
@@ -1139,7 +1247,7 @@ export default function Dashboard() {
         log,
         isToday,
         gridKind,
-        hasPhoto: !!(log?.progress_photo && String(log.progress_photo).length > 40),
+        hasPhoto: isProgressPhotoValue(log?.progress_photo),
       })
     }
     return cells
@@ -1166,26 +1274,50 @@ export default function Dashboard() {
     [progressScopedAttempt, startDateStr]
   )
 
-  const progressPhotosGallery = useMemo(() => {
+  const progressPhotoGalleryCells = useMemo(() => {
     const start = progressScopedAttempt?.start_date ?? startDateStr
     const rawEnd = progressScopedAttempt?.ended_at ?? todayLocalISO()
+    const ct = todayLocalISO()
     const lastChallengeDay = addDaysISO(start, 74)
     const through = minDateStr(rawEnd, lastChallengeDay)
-    const list = []
-    for (const log of allLogs) {
-      if (!log?.date || log.date < start || log.date > through) continue
-      const ph = log.progress_photo
-      if (!ph || typeof ph !== 'string' || ph.length < 50 || !ph.startsWith('data:')) continue
-      const dayNum = challengeDayNumber(start, log.date)
-      list.push({ date: log.date, dayNum, src: ph, id: log.id })
+    const windowEnd = progressScopedAttempt?.ended_at ? through : minDateStr(through, ct)
+
+    const result = []
+    for (let d = start; d <= windowEnd; d = addDaysISO(d, 1)) {
+      const log = logsByDate.get(d)
+      const ph = log?.progress_photo
+      const has = isProgressPhotoValue(ph)
+      const dayNum = challengeDayNumber(start, d)
+      if (has) {
+        result.push({
+          key: `p-${d}-${log?.id ?? d}`,
+          date: d,
+          dayNum,
+          src: String(ph).trim(),
+          id: log?.id ?? null,
+          kind: 'photo',
+        })
+      } else if (!isProgressHistoryView && !is75Soft(challengeType)) {
+        result.push({
+          key: `ph-${d}`,
+          date: d,
+          dayNum,
+          src: null,
+          id: null,
+          kind: 'placeholder',
+        })
+      }
     }
-    list.sort((a, b) => b.date.localeCompare(a.date))
-    return list
-  }, [allLogs, progressScopedAttempt, startDateStr])
+    result.sort((a, b) => b.date.localeCompare(a.date))
+    return result
+  }, [progressScopedAttempt, startDateStr, logsByDate, isProgressHistoryView, challengeType])
 
   const progressPhotosFlipOrder = useMemo(
-    () => [...progressPhotosGallery].sort((a, b) => a.date.localeCompare(b.date)),
-    [progressPhotosGallery]
+    () =>
+      progressPhotoGalleryCells
+        .filter((c) => c.kind === 'photo' && c.src)
+        .sort((a, b) => a.date.localeCompare(b.date)),
+    [progressPhotoGalleryCells]
   )
 
   const selectedReadingBook = useMemo(
@@ -2000,17 +2132,20 @@ export default function Dashboard() {
     setProgressPhotoBusy(true)
     setLoadError('')
     try {
-      const dataUrl = await imageFileToJpegDataUrl(file)
-      if (dataUrl.length > 4_500_000) {
-        setLoadError('Image is still too large after resize. Try a smaller photo.')
+      const dataUrl = await encodeProgressPhotoForStorage(file)
+      if (dataUrlByteLength(dataUrl) > 2_500_000) {
+        setLoadError('Image is still too large after compression. Try a smaller photo.')
         return
       }
-      const { error } = await supabase.from('daily_logs').update({ progress_photo: dataUrl }).eq('id', row0.id)
+      const hard = !is75Soft(challengeType)
+      const patch = { progress_photo: dataUrl }
+      if (hard) patch.photo_done = true
+      const { error } = await supabase.from('daily_logs').update(patch).eq('id', row0.id)
       if (error) {
         setLoadError(error.message || 'Upload failed')
         return
       }
-      const merged = { ...row0, progress_photo: dataUrl }
+      const merged = { ...row0, ...patch }
       const cal = todayLocalISO()
       if (targetDate === cal) {
         todayLogRef.current = merged
@@ -2026,6 +2161,8 @@ export default function Dashboard() {
         copy[idx] = merged
         return copy
       })
+      const kb = (dataUrlByteLength(dataUrl) / 1024).toFixed(1)
+      setProgressPhotoSaveToast(`Photo saved (${kb} KB)`)
     } catch {
       setLoadError('Could not process image.')
     } finally {
@@ -2513,10 +2650,7 @@ export default function Dashboard() {
   }, [structuredMealsOk, mealPlanSplit])
 
   const workoutCatalog = useMemo(
-    () => [
-      ...WORKOUT_DB.indoor.map((w) => ({ ...w, location: 'indoor' })),
-      ...WORKOUT_DB.outdoor.map((w) => ({ ...w, location: 'outdoor' })),
-    ],
+    () => [...WORKOUT_DB.indoor, ...WORKOUT_DB.outdoor],
     []
   )
   const filteredWorkouts = useMemo(() => {
@@ -2548,15 +2682,7 @@ export default function Dashboard() {
 
     const list = workoutCatalog.filter((w) => {
       const text = `${w.name} ${w.desc}`.toLowerCase()
-      let chipMatch = true
-      if (chip === 'Cardio') chipMatch = w.type === 'cardio'
-      else if (chip === 'Flexibility') chipMatch = w.type === 'flexibility'
-      else if (chip === 'Core') chipMatch = /core|plank/.test(text)
-      else if (chip === 'Upper Body') chipMatch = /upper|push|pull|chest|back|shoulder|arms/.test(text)
-      else if (chip === 'Lower Body') chipMatch = /lower|leg|squat|lunge|hill|glute/.test(text)
-      else if (chip === 'Full Body') chipMatch = /full[- ]?body|circuit/.test(text)
-      else if (chip === 'Recovery') chipMatch = w.type === 'flexibility'
-      if (!chipMatch) return false
+      if (!workoutMatchesWorkoutChip(w, chip)) return false
       if (onlyFlexibility) {
         if (w.type !== 'flexibility') return false
       } else if (excludeStrength) {
@@ -2615,6 +2741,11 @@ export default function Dashboard() {
         {macroRecalibratedToast ? (
           <p className="dash-macro-toast" role="status">
             {macroRecalibratedToast}
+          </p>
+        ) : null}
+        {progressPhotoSaveToast ? (
+          <p className="dash-macro-toast dash-photo-save-toast" role="status">
+            {progressPhotoSaveToast}
           </p>
         ) : null}
         {loadError ? <p className="dash-error">{loadError}</p> : null}
@@ -2866,23 +2997,65 @@ export default function Dashboard() {
               </div>
 
               {!is75Soft(challengeType) ? (
-                <div className={`dash-mission-card${displayLog.photo_done ? ' dash-mission-card--done' : ''}`}>
-                  <button
-                    type="button"
-                    className={`dash-check dash-check--fill ${displayLog.photo_done ? 'dash-check--on' : ''}`}
-                    onClick={() => toggleBool('photo_done')}
-                  >
-                    <span className="dash-check-box" aria-hidden>{displayLog.photo_done ? '✓' : ''}</span>
-                    <span className="dash-check-body">
-                      <p className="dash-check-title">Progress photo</p>
-                      <p className={`dash-check-sub ${displayLog.progress_photo ? 'dash-check-sub--good' : 'dash-check-sub--warn'}`}>
-                        {displayLog.progress_photo ? 'Photo uploaded ✓' : 'Tap › to upload in Progress'}
-                      </p>
-                    </span>
-                  </button>
-                  <button type="button" className="dash-check-jump" onClick={() => setTab('progress')}>
-                    ›
-                  </button>
+                <div className={`dash-mission-card dash-mission-card--photo${displayLog.photo_done ? ' dash-mission-card--done' : ''}`}>
+                  <div className="dash-mission-card-top-row">
+                    <button
+                      type="button"
+                      className={`dash-check dash-check--fill ${displayLog.photo_done ? 'dash-check--on' : ''}`}
+                      onClick={() => toggleBool('photo_done')}
+                    >
+                      <span className="dash-check-box" aria-hidden>{displayLog.photo_done ? '✓' : ''}</span>
+                      <span className="dash-check-body">
+                        <p className="dash-check-title">Progress photo</p>
+                        <p
+                          className={`dash-check-sub ${isProgressPhotoValue(displayLog.progress_photo) ? 'dash-check-sub--good' : 'dash-check-sub--warn'}`}
+                        >
+                          {isProgressPhotoValue(displayLog.progress_photo)
+                            ? 'Photo saved for this day ✓'
+                            : 'Upload a progress photo for this day'}
+                        </p>
+                      </span>
+                    </button>
+                    <button type="button" className="dash-check-jump" onClick={() => setTab('progress')}>
+                      ›
+                    </button>
+                  </div>
+                  <div className="dash-today-photo-upload-row">
+                    <input
+                      id="dash-today-progress-photo"
+                      ref={progressPhotoInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="dash-photo-file-input"
+                      onChange={(e) => void onProgressPhotoFile(e)}
+                    />
+                    {isProgressPhotoValue(displayLog.progress_photo) ? (
+                      <button
+                        type="button"
+                        className="dash-today-photo-thumb-wrap"
+                        onClick={() => progressPhotoInputRef.current?.click()}
+                        aria-label="View or change progress photo"
+                      >
+                        <img
+                          src={String(displayLog.progress_photo).trim()}
+                          alt=""
+                          className="dash-today-photo-thumb"
+                        />
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="dash-photo-upload-btn"
+                      disabled={progressPhotoBusy}
+                      onClick={() => progressPhotoInputRef.current?.click()}
+                    >
+                      {progressPhotoBusy
+                        ? 'Processing…'
+                        : isProgressPhotoValue(displayLog.progress_photo)
+                          ? 'Change photo'
+                          : 'Upload photo'}
+                    </button>
+                  </div>
                 </div>
               ) : null}
 
@@ -3837,27 +4010,14 @@ export default function Dashboard() {
                 </button>
               </div>
             ) : null}
-            {!is75Soft(challengeType) ? (
-              <div className="dash-photo-upload-row dash-photo-upload-row--below" style={{ marginBottom: '0.9rem' }}>
-                <input
-                  ref={progressPhotoInputRef}
-                  type="file"
-                  accept="image/*"
-                  className="dash-photo-file-input"
-                  onChange={(e) => void onProgressPhotoFile(e)}
-                />
-                <button
-                  type="button"
-                  className="dash-photo-upload-btn"
-                  disabled={progressPhotoBusy}
-                  onClick={() => progressPhotoInputRef.current?.click()}
-                >
-                  {progressPhotoBusy ? 'Processing…' : 'Upload today’s progress photo'}
-                </button>
-              </div>
-            ) : (
+            {is75Soft(challengeType) ? (
               <p className="dash-muted" style={{ marginBottom: '0.85rem' }}>
                 Progress photos are optional on 75 Soft. You can upload one anytime from the Today tab.
+              </p>
+            ) : (
+              <p className="dash-muted" style={{ marginBottom: '0.85rem' }}>
+                Add a photo for any day from the Today tab, or tap a + tile below to jump to a day that still needs a
+                photo.
               </p>
             )}
 
@@ -4020,7 +4180,7 @@ export default function Dashboard() {
             <h3 className="dash-section-title" style={{ fontSize: '1rem' }}>
               Progress photos
             </h3>
-            {progressPhotosGallery.length >= 2 ? (
+            {progressPhotosFlipOrder.length >= 2 ? (
               <button
                 type="button"
                 className="dash-flipbook-open-btn"
@@ -4033,20 +4193,52 @@ export default function Dashboard() {
                 ▶ Create Flipbook
               </button>
             ) : null}
-            {progressPhotosGallery.length ? (
+            {progressPhotoGalleryCells.length ? (
               <div className="dash-photo-gallery">
-                {progressPhotosGallery.map((p) => (
-                  <div key={p.id} className="dash-photo-gallery-cell">
-                    <img className="dash-photo-gallery-img" src={p.src} alt="" />
-                    <p className="dash-photo-gallery-caption">
-                      Day {p.dayNum} · {p.date}
-                    </p>
-                  </div>
-                ))}
+                {progressPhotoGalleryCells.map((cell) =>
+                  cell.kind === 'photo' ? (
+                    <button
+                      key={cell.key}
+                      type="button"
+                      className="dash-photo-gallery-cell dash-photo-gallery-cell--btn"
+                      onClick={() => {
+                        const list = progressPhotoGalleryCells.filter((c) => c.kind === 'photo' && c.src)
+                        const idx = list.findIndex((c) => c.date === cell.date)
+                        if (idx >= 0) setPhotoLightbox({ list, index: idx })
+                      }}
+                    >
+                      <img className="dash-photo-gallery-img" src={cell.src} alt="" />
+                      <p className="dash-photo-gallery-caption">
+                        <span className="dash-photo-gallery-day">Day {cell.dayNum}</span>
+                        <span className="dash-photo-gallery-date">{cell.date}</span>
+                      </p>
+                    </button>
+                  ) : (
+                    <button
+                      key={cell.key}
+                      type="button"
+                      className="dash-photo-gallery-cell dash-photo-gallery-cell--placeholder"
+                      onClick={() => {
+                        setTab('today')
+                        setViewDate(cell.date)
+                      }}
+                    >
+                      <span className="dash-photo-gallery-plus" aria-hidden>
+                        +
+                      </span>
+                      <p className="dash-photo-gallery-caption">
+                        <span className="dash-photo-gallery-day">Day {cell.dayNum}</span>
+                        <span className="dash-photo-gallery-date">{cell.date}</span>
+                      </p>
+                    </button>
+                  )
+                )}
               </div>
             ) : (
               <p className="dash-muted dash-photo-gallery-empty">
-                Your transformation gallery will appear here as you upload daily photos.
+                {isProgressHistoryView
+                  ? 'No progress photos in this attempt window.'
+                  : 'Your transformation gallery will appear here as you upload daily photos.'}
               </p>
             )}
 
@@ -4097,8 +4289,8 @@ export default function Dashboard() {
             ) : null}
             <div className="dash-profile-card">
               <div className="dash-profile-row">
-                <span className="dash-profile-label">Username</span>
-                <span className="dash-profile-value">{profile.username ?? '—'}</span>
+                <span className="dash-profile-label">Email</span>
+                <span className="dash-profile-value">{profile.email?.trim() || '—'}</span>
               </div>
               <div className="dash-profile-row">
                 <span className="dash-profile-label">Current Challenge</span>
@@ -4207,6 +4399,70 @@ export default function Dashboard() {
                 {profileStartDateBusy ? 'Saving…' : 'Save'}
               </button>
             </div>
+          </div>
+        </div>
+      ) : null}
+
+      {photoLightbox?.list?.length ? (
+        <div
+          className="dash-photo-lightbox-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Progress photo"
+          onClick={() => setPhotoLightbox(null)}
+        >
+          <div className="dash-photo-lightbox-inner" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              className="dash-photo-lightbox-close"
+              onClick={() => setPhotoLightbox(null)}
+              aria-label="Close"
+            >
+              ×
+            </button>
+            <div className="dash-photo-lightbox-stage">
+              {photoLightbox.list.length > 1 ? (
+                <button
+                  type="button"
+                  className="dash-photo-lightbox-arrow dash-photo-lightbox-arrow--prev"
+                  aria-label="Previous photo"
+                  onClick={() =>
+                    setPhotoLightbox((lb) => {
+                      if (!lb?.list?.length) return lb
+                      const n = lb.list.length
+                      return { ...lb, index: (lb.index - 1 + n) % n }
+                    })
+                  }
+                >
+                  ‹
+                </button>
+              ) : null}
+              <img
+                className="dash-photo-lightbox-img"
+                src={photoLightbox.list[photoLightbox.index]?.src}
+                alt=""
+              />
+              {photoLightbox.list.length > 1 ? (
+                <button
+                  type="button"
+                  className="dash-photo-lightbox-arrow dash-photo-lightbox-arrow--next"
+                  aria-label="Next photo"
+                  onClick={() =>
+                    setPhotoLightbox((lb) => {
+                      if (!lb?.list?.length) return lb
+                      const n = lb.list.length
+                      return { ...lb, index: (lb.index + 1) % n }
+                    })
+                  }
+                >
+                  ›
+                </button>
+              ) : null}
+            </div>
+            <p className="dash-photo-lightbox-caption">
+              Day {photoLightbox.list[photoLightbox.index]?.dayNum} ·{' '}
+              {photoLightbox.list[photoLightbox.index]?.date}
+            </p>
           </div>
         </div>
       ) : null}

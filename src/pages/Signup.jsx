@@ -1,12 +1,12 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { friendlyDisplayFromEmail } from '../lib/emailDisplay'
 import './auth-forms.css'
 
-const USERNAME_RE = /^[a-zA-Z0-9_]{2,32}$/
-
-function usernameToFakeEmail(raw) {
-  return `${raw.trim().toLowerCase()}@75hard.app`
+function isValidEmail(raw) {
+  const s = String(raw ?? '').trim()
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s)
 }
 
 function mapSignupError(error) {
@@ -17,13 +17,13 @@ function mapSignupError(error) {
     msg.includes('already been registered') ||
     msg.includes('already exists')
   ) {
-    return 'That username is already taken.'
+    return 'That email is already registered.'
   }
   if (msg.includes('password')) {
     return 'Password must be at least 6 characters.'
   }
   if (msg.includes('email')) {
-    return 'Invalid username for sign-up. Use letters, numbers, or underscores only.'
+    return 'Enter a valid email address.'
   }
   if (msg.includes('too many requests')) {
     return 'Too many attempts. Wait a moment and try again.'
@@ -33,25 +33,31 @@ function mapSignupError(error) {
 
 export default function Signup() {
   const navigate = useNavigate()
-  const [username, setUsername] = useState('')
+  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
   const [error, setError] = useState('')
   const [info, setInfo] = useState('')
   const [loading, setLoading] = useState(false)
+
+  const passwordsMismatch =
+    confirmPassword.length > 0 && password !== confirmPassword
 
   async function handleSubmit(e) {
     e.preventDefault()
     setError('')
     setInfo('')
-    const displayName = username.trim()
-    if (!displayName || !password) {
-      setError('Choose a username and password.')
+    const emailTrim = email.trim()
+    if (!emailTrim || !password || !confirmPassword) {
+      setError('Enter your email, password, and confirm password.')
       return
     }
-    if (!USERNAME_RE.test(displayName)) {
-      setError(
-        'Username must be 2–32 characters: letters, numbers, or underscores only.'
-      )
+    if (!isValidEmail(emailTrim)) {
+      setError('Enter a valid email address.')
+      return
+    }
+    if (password !== confirmPassword) {
+      setError('Passwords do not match.')
       return
     }
     if (password.length < 6) {
@@ -59,12 +65,12 @@ export default function Signup() {
       return
     }
 
-    const email = usernameToFakeEmail(displayName)
+    const displayName = friendlyDisplayFromEmail(emailTrim) || emailTrim
 
     setLoading(true)
     try {
       const { data, error: signError } = await supabase.auth.signUp({
-        email,
+        email: emailTrim,
         password,
         options: {
           data: {
@@ -96,25 +102,22 @@ export default function Signup() {
       <div className="auth-card">
         <p className="auth-brand">THE 75 CHALLENGE</p>
         <h1 className="auth-title">Create account</h1>
-        <p className="auth-sub">
-          Pick a username and password. We use a private sign-in address behind
-          the scenes.
-        </p>
+        <p className="auth-sub">Sign up with your email and password.</p>
 
         <form onSubmit={handleSubmit} noValidate>
           {error ? <p className="auth-error">{error}</p> : null}
           {info ? <p className="auth-success">{info}</p> : null}
 
           <div className="auth-field">
-            <label htmlFor="signup-username">Username</label>
+            <label htmlFor="signup-email">Email</label>
             <input
-              id="signup-username"
-              name="username"
-              type="text"
-              autoComplete="username"
-              placeholder="yourname"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
+              id="signup-email"
+              name="email"
+              type="email"
+              autoComplete="email"
+              placeholder="you@example.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
               disabled={loading}
             />
           </div>
@@ -131,6 +134,25 @@ export default function Signup() {
               onChange={(e) => setPassword(e.target.value)}
               disabled={loading}
             />
+          </div>
+
+          <div className="auth-field">
+            <label htmlFor="signup-confirm-password">Confirm password</label>
+            <input
+              id="signup-confirm-password"
+              name="confirmPassword"
+              type="password"
+              autoComplete="new-password"
+              placeholder="Re-enter your password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              disabled={loading}
+            />
+            {passwordsMismatch ? (
+              <p className="auth-field-inline-error" role="alert">
+                Passwords do not match
+              </p>
+            ) : null}
           </div>
 
           <button className="auth-submit" type="submit" disabled={loading}>
