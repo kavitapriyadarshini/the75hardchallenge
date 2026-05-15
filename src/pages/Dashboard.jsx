@@ -96,12 +96,11 @@ const WORKOUT_PREF_CHIPS = [
   'Lower Body',
   'Core',
   'Full Body',
-  'Recovery',
 ]
 
 function workoutMatchesWorkoutChip(w, chip) {
   if (chip === 'All') return true
-  const targets = Array.isArray(w.targets) ? w.targets : []
+  const mg = String(w.muscleGroup || '').toLowerCase()
   switch (chip) {
     case 'Cardio':
       return w.type === 'cardio'
@@ -110,15 +109,13 @@ function workoutMatchesWorkoutChip(w, chip) {
     case 'Flexibility':
       return w.type === 'flexibility'
     case 'Upper Body':
-      return targets.includes('upper')
+      return mg === 'upper body'
     case 'Lower Body':
-      return targets.includes('lower')
+      return mg === 'lower body'
     case 'Core':
-      return targets.includes('core')
+      return mg === 'core'
     case 'Full Body':
-      return targets.includes('full')
-    case 'Recovery':
-      return targets.includes('recovery')
+      return mg === 'full body'
     default:
       return true
   }
@@ -3649,7 +3646,7 @@ export default function Dashboard() {
                                           type="button"
                                           className="dash-meal-else-log"
                                           onClick={() => void logActualMealForSlot(slotIndex)}
-                                          disabled={mealElseSlots[slotIndex]?.logging || !displayLog?.id}
+                                          disabled={!!mealElseSlots[slotIndex]?.logging}
                                         >
                                           {mealElseSlots[slotIndex]?.logging
                                             ? 'Saving…'
@@ -3675,7 +3672,7 @@ export default function Dashboard() {
                                               type="button"
                                               className="dash-meal-else-log"
                                               onClick={() => void logActualMealForSlot(slotIndex)}
-                                              disabled={mealElseSlots[slotIndex]?.logging || !displayLog?.id}
+                                              disabled={!!mealElseSlots[slotIndex]?.logging}
                                             >
                                               {mealElseSlots[slotIndex]?.logging ? 'Saving…' : 'Log anyway'}
                                             </button>
@@ -3746,7 +3743,7 @@ export default function Dashboard() {
                         type="button"
                         className="dash-meal-planner-save"
                         onClick={() => void saveMealPlanToLog()}
-                        disabled={mealPlanSaveBusy || !displayLog?.id}
+                        disabled={mealPlanSaveBusy}
                       >
                         {mealPlanSaveBusy ? 'Saving…' : 'Save to today’s log'}
                       </button>
