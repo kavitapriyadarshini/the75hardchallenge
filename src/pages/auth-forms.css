@@ -137,3 +137,64 @@
 .auth-footer a:hover {
   text-decoration: underline;
 }
+
+.auth-pwa-install {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  width: 100%;
+  margin-top: 0.85rem;
+  padding: 0.72rem 1rem;
+  font-family: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #e07b39;
+  background: transparent;
+  border: 1px solid #e07b39;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.auth-pwa-install:hover {
+  background: rgba(224, 123, 57, 0.12);
+}
+
+.auth-pwa-install-icon {
+  font-size: 1.05rem;
+  line-height: 1;
+}
+
+.auth-pwa-ios-hint {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.2rem 0.35rem;
+  margin: 0.85rem 0 0;
+  padding: 0.65rem 0.75rem;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: #9a9a9a;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid #2a2a2a;
+  border-radius: 8px;
+}
+
+.auth-pwa-ios-hint strong {
+  color: #c4c4c4;
+  font-weight: 600;
+}
+
+.auth-pwa-ios-share {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 1.35rem;
+  height: 1.35rem;
+  color: #0d0d0d;
+  background: #e07b39;
+  border-radius: 4px;
+  vertical-align: middle;
+}

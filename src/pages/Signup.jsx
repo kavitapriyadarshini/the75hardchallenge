@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { friendlyDisplayFromEmail } from '../lib/emailDisplay'
+import PWAInstallAuth from '../components/PWAInstallAuth.jsx'
 import './auth-forms.css'
 
 function isValidEmail(raw) {
@@ -158,6 +159,8 @@ export default function Signup() {
           <button className="auth-submit" type="submit" disabled={loading}>
             {loading ? 'Creating account…' : 'Sign up'}
           </button>
+
+          <PWAInstallAuth />
         </form>
 
         <p className="auth-footer">
