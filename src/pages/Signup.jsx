@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { friendlyDisplayFromEmail } from '../lib/emailDisplay'
-import { AuthPWAInstallPrompt } from '../hooks/usePWAInstall.jsx'
+import { AuthPWAInstallPrompt } from '../hooks/usePWAInstall'
 import './auth-forms.css'
 
 function isValidEmail(raw) {

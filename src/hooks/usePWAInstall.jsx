@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 function isStandaloneDisplay() {
   return (
-    window.matchMedia?.('(display-mode: standalone)').matches ||
+    window.matchMedia('(display-mode: standalone)').matches ||
     window.navigator.standalone === true
   )
 }
@@ -11,10 +11,6 @@ function isIosDevice() {
   return /iPad|iPhone|iPod/.test(navigator.userAgent)
 }
 
-/**
- * Captures `beforeinstallprompt` for Android/Chrome install UI.
- * iOS Safari: use `showIosHint` (no beforeinstallprompt).
- */
 export function usePWAInstall() {
   const deferredPromptRef = useRef(null)
   const [canInstall, setCanInstall] = useState(false)
@@ -61,13 +57,13 @@ export function usePWAInstall() {
   const showIosHint = isIos && !isStandalone && !canInstall
 
   return {
+    canInstall,
     showInstallButton,
     showIosHint,
     promptInstall,
   }
 }
 
-/** Login / Signup install prompt — Android `beforeinstallprompt` or iOS Safari hint. */
 export function AuthPWAInstallPrompt() {
   const { showInstallButton, showIosHint, promptInstall } = usePWAInstall()
 
@@ -78,10 +74,7 @@ export function AuthPWAInstallPrompt() {
         className="auth-pwa-install"
         onClick={() => void promptInstall()}
       >
-        <span className="auth-pwa-install-icon" aria-hidden>
-          📲
-        </span>
-        Add Unlock75 to your home screen
+        📲 Add Unlock75 to your home screen
       </button>
     )
   }
@@ -89,18 +82,7 @@ export function AuthPWAInstallPrompt() {
   if (showIosHint) {
     return (
       <p className="auth-pwa-ios-hint" role="note">
-        <span className="auth-pwa-ios-share" aria-hidden title="Share">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path
-              d="M12 3v10M12 3l4 4M12 3L8 7M5 11v8a2 2 0 002 2h10a2 2 0 002-2v-8"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </span>
-        On iPhone: tap <strong>Share</strong> → <strong>Add to Home Screen</strong>
+        On iPhone: tap Share <span aria-hidden>⬆</span> then Add to Home Screen
       </p>
     )
   }
