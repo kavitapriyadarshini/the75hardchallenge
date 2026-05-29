@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import PWAInstallAuth from '../components/PWAInstallAuth.jsx'
+import { AuthPWAInstallPrompt } from '../hooks/usePWAInstall.jsx'
 import './auth-forms.css'
 
 function challengeTypeLooksValid(raw) {
@@ -129,7 +129,7 @@ export default function Login() {
             {loading ? 'Signing in…' : 'Sign in'}
           </button>
 
-          <PWAInstallAuth />
+          <AuthPWAInstallPrompt />
         </form>
 
         <p className="auth-footer">
