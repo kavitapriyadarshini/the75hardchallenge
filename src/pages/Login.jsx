@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { resolvePostLoginPath } from '../lib/authRouting'
 import { AuthPWAInstallPrompt } from '../hooks/usePWAInstall'
 import './auth-forms.css'
 
@@ -33,6 +34,24 @@ export default function Login() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [checkingSession, setCheckingSession] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      const { data } = await supabase.auth.getSession()
+      if (cancelled) return
+      if (data.session?.user) {
+        const path = await resolvePostLoginPath(data.session.user.id)
+        navigate(path, { replace: true })
+        return
+      }
+      setCheckingSession(false)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [navigate])
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -85,6 +104,10 @@ export default function Login() {
     } finally {
       setLoading(false)
     }
+  }
+
+  if (checkingSession) {
+    return <div className="auth-page auth-page--loading">Loading…</div>
   }
 
   return (

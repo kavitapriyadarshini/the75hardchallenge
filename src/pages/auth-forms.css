@@ -138,51 +138,54 @@
   text-decoration: underline;
 }
 
+.auth-page--loading {
+  color: #9a9a9a;
+  font-size: 0.9375rem;
+}
+
 .auth-pwa-install {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 0.45rem;
   width: 100%;
   margin-top: 0.85rem;
-  padding: 0.72rem 1rem;
+  padding: 0.8rem 1rem;
   font-family: inherit;
-  font-size: 0.875rem;
+  font-size: 1rem;
   font-weight: 600;
   color: #e07b39;
   background: transparent;
-  border: 1px solid #e07b39;
+  border: 2px solid #e07b39;
   border-radius: 8px;
   cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition: background 0.15s ease, color 0.15s ease, transform 0.05s ease;
 }
 
 .auth-pwa-install:hover {
-  background: rgba(224, 123, 57, 0.12);
+  background: rgba(224, 123, 57, 0.14);
+  color: #fafafa;
 }
 
-.auth-pwa-install-icon {
-  font-size: 1.05rem;
-  line-height: 1;
+.auth-pwa-install:active {
+  transform: scale(0.99);
 }
 
 .auth-pwa-ios-hint {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.2rem 0.35rem;
+  align-items: flex-start;
+  gap: 0.55rem;
   margin: 0.85rem 0 0;
-  padding: 0.65rem 0.75rem;
+  padding: 0.75rem 0.85rem;
   font-size: 0.8125rem;
-  line-height: 1.45;
-  color: #9a9a9a;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid #2a2a2a;
-  border-radius: 8px;
+  line-height: 1.5;
+  color: #c4c4c4;
+  background: rgba(224, 123, 57, 0.12);
+  border: 1px solid rgba(224, 123, 57, 0.35);
+  border-radius: 10px;
 }
 
-.auth-pwa-ios-hint strong {
-  color: #c4c4c4;
+.auth-pwa-ios-copy strong {
+  color: #fafafa;
   font-weight: 600;
 }
 
@@ -191,10 +194,11 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  width: 1.35rem;
-  height: 1.35rem;
+  width: 1.5rem;
+  height: 1.5rem;
+  font-size: 0.85rem;
+  font-weight: 700;
   color: #0d0d0d;
   background: #e07b39;
-  border-radius: 4px;
-  vertical-align: middle;
+  border-radius: 6px;
 }

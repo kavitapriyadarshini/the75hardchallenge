@@ -35,3 +35,12 @@ body {
   border: none;
   text-align: initial;
 }
+
+.app-loading {
+  min-height: 100svh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #9a9a9a;
+  font-size: 0.9375rem;
+}

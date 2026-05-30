@@ -74,16 +74,21 @@ export function AuthPWAInstallPrompt() {
         className="auth-pwa-install"
         onClick={() => void promptInstall()}
       >
-        📲 Add Unlock75 to your home screen
+        📲 Add to Home Screen
       </button>
     )
   }
 
   if (showIosHint) {
     return (
-      <p className="auth-pwa-ios-hint" role="note">
-        On iPhone: tap Share <span aria-hidden>⬆</span> then Add to Home Screen
-      </p>
+      <div className="auth-pwa-ios-hint" role="note">
+        <span className="auth-pwa-ios-share" aria-hidden title="Share">
+          ⬆
+        </span>
+        <span className="auth-pwa-ios-copy">
+          On iPhone: tap <strong>Share</strong> then <strong>Add to Home Screen</strong>
+        </span>
+      </div>
     )
   }
 

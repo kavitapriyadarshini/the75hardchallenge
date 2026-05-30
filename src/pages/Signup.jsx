@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { resolvePostLoginPath } from '../lib/authRouting'
 import { friendlyDisplayFromEmail } from '../lib/emailDisplay'
 import { AuthPWAInstallPrompt } from '../hooks/usePWAInstall'
 import './auth-forms.css'
@@ -40,6 +41,24 @@ export default function Signup() {
   const [error, setError] = useState('')
   const [info, setInfo] = useState('')
   const [loading, setLoading] = useState(false)
+  const [checkingSession, setCheckingSession] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      const { data } = await supabase.auth.getSession()
+      if (cancelled) return
+      if (data.session?.user) {
+        const path = await resolvePostLoginPath(data.session.user.id)
+        navigate(path, { replace: true })
+        return
+      }
+      setCheckingSession(false)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [navigate])
 
   const passwordsMismatch =
     confirmPassword.length > 0 && password !== confirmPassword
@@ -96,6 +115,10 @@ export default function Signup() {
     } finally {
       setLoading(false)
     }
+  }
+
+  if (checkingSession) {
+    return <div className="auth-page auth-page--loading">Loading…</div>
   }
 
   return (
