@@ -451,9 +451,64 @@ const PROGRESS_PHOTO_MAX_FILE_BYTES = 10 * 1024 * 1024
 function isAcceptedImageFile(file) {
   if (!file) return false
   const type = String(file.type || '').toLowerCase()
-  if (type.startsWith('image/')) return true
+  if (['image/jpeg', 'image/jpg', 'image/png', 'image/webp'].includes(type)) return true
   const name = String(file.name || '').toLowerCase()
-  return /\.(jpe?g|png|heic|heif|webp)$/i.test(name)
+  return /\.(jpe?g|png|webp)$/i.test(name)
+}
+
+function compressImage(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const img = new Image()
+      img.onload = () => {
+        const canvas = document.createElement('canvas')
+        let w = img.width
+        let h = img.height
+        const MAX = 500
+        if (w > MAX || h > MAX) {
+          if (w > h) {
+            h = Math.round((h * MAX) / w)
+            w = MAX
+          } else {
+            w = Math.round((w * MAX) / h)
+            h = MAX
+          }
+        }
+        canvas.width = w
+        canvas.height = h
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h)
+        let result = canvas.toDataURL('image/jpeg', 0.4)
+        if (result.length > 500000) {
+          result = canvas.toDataURL('image/jpeg', 0.25)
+        }
+        console.log('Compressed photo size:', result.length)
+        resolve(result)
+      }
+      img.onerror = () => {
+        resolve(e.target.result)
+      }
+      img.src = e.target.result
+    }
+    reader.onerror = () => reject(new Error('Could not read file'))
+    reader.readAsDataURL(file)
+  })
+}
+
+async function processAndSavePhoto(file, userId, date, extraPatch = {}) {
+  const base64 = await compressImage(file)
+
+  const { error } = await supabase
+    .from('daily_logs')
+    .update({ progress_photo: base64, ...extraPatch })
+    .eq('user_id', userId)
+    .eq('date', date)
+
+  if (error) {
+    console.error('Supabase save error:', error)
+    throw new Error(`Failed to save: ${error.message}`)
+  }
+  return base64
 }
 
 function progressPhotoDisplaySrc(raw) {
@@ -481,60 +536,6 @@ function ProgressPhotoImg({ src, className, alt = '' }) {
       onError={() => setBroken(true)}
     />
   )
-}
-
-async function processAndSavePhoto(file, userId, date, extraPatch = {}) {
-  const compressImage = (inputFile, quality = 0.4, maxDim = 500) => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader()
-      reader.onload = (e) => {
-        const img = new Image()
-        img.onload = () => {
-          const canvas = document.createElement('canvas')
-          let w = img.width
-          let h = img.height
-          if (w > maxDim || h > maxDim) {
-            if (w > h) {
-              h = Math.round((h * maxDim) / w)
-              w = maxDim
-            } else {
-              w = Math.round((w * maxDim) / h)
-              h = maxDim
-            }
-          }
-          canvas.width = w
-          canvas.height = h
-          const ctx = canvas.getContext('2d')
-          if (!ctx) {
-            reject(new Error('Could not process image'))
-            return
-          }
-          ctx.drawImage(img, 0, 0, w, h)
-          resolve(canvas.toDataURL('image/jpeg', quality))
-        }
-        img.onerror = () => reject(new Error('Could not load image'))
-        img.src = e.target.result
-      }
-      reader.onerror = () => reject(new Error('Could not read file'))
-      reader.readAsDataURL(inputFile)
-    })
-  }
-
-  let base64 = await compressImage(file, 0.4, 500)
-  if (base64.length > 500000) base64 = await compressImage(file, 0.3, 400)
-  if (base64.length > 500000) base64 = await compressImage(file, 0.2, 300)
-
-  const { error } = await supabase
-    .from('daily_logs')
-    .update({ progress_photo: base64, ...extraPatch })
-    .eq('user_id', userId)
-    .eq('date', date)
-
-  if (error) {
-    console.error('Supabase save error:', error)
-    throw new Error(`Failed to save: ${error.message}`)
-  }
-  return base64
 }
 
 function addDaysISO(iso, delta) {
@@ -2193,7 +2194,7 @@ export default function Dashboard() {
     e.target.value = ''
     if (!file) return
     if (!isAcceptedImageFile(file)) {
-      setLoadError('Please choose a JPG, PNG, WEBP, or HEIC image.')
+      setLoadError('Please choose a JPG, PNG, or WEBP image.')
       return
     }
     if (file.size > PROGRESS_PHOTO_MAX_FILE_BYTES) {
@@ -3096,7 +3097,7 @@ export default function Dashboard() {
                       id="dash-today-progress-photo"
                       ref={progressPhotoInputRef}
                       type="file"
-                      accept="image/*,.heic,.heif"
+                      accept="image/jpeg,image/jpg,image/png,image/webp"
                       className="dash-photo-file-input"
                       onChange={(e) => void onProgressPhotoFile(e)}
                     />
