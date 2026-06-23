@@ -446,16 +446,7 @@ function typeBadgeClass(type) {
   return 'dash-type-badge dash-type-flex'
 }
 
-/** Approximate decoded byte length of a data URL (image payload). */
-function dataUrlByteLength(dataUrl) {
-  const idx = dataUrl.indexOf(',')
-  const base64 = idx === -1 ? dataUrl : dataUrl.slice(idx + 1)
-  const padding = base64.endsWith('==') ? 2 : base64.endsWith('=') ? 1 : 0
-  return Math.max(0, (base64.length * 3) / 4 - padding)
-}
-
 const PROGRESS_PHOTO_MAX_FILE_BYTES = 10 * 1024 * 1024
-const PROGRESS_PHOTO_MAX_SAVE_BYTES = 2_500_000
 
 function isAcceptedImageFile(file) {
   if (!file) return false
@@ -465,105 +456,85 @@ function isAcceptedImageFile(file) {
   return /\.(jpe?g|png|heic|heif|webp)$/i.test(name)
 }
 
-function isHeicFile(file) {
-  const type = String(file.type || '').toLowerCase()
-  const name = String(file.name || '').toLowerCase()
+function progressPhotoDisplaySrc(raw) {
+  if (raw == null || typeof raw !== 'string') return null
+  const s = raw.trim()
+  if (!s) return null
+  if (s.startsWith('data:') || /^https?:\/\//i.test(s)) return s
+  return null
+}
+
+function isProgressPhotoValue(ph) {
+  return progressPhotoDisplaySrc(ph) != null
+}
+
+function ProgressPhotoImg({ src, className, alt = '' }) {
+  const displaySrc = progressPhotoDisplaySrc(src)
+  const [broken, setBroken] = useState(false)
+  if (!displaySrc || broken) return null
   return (
-    type === 'image/heic' ||
-    type === 'image/heif' ||
-    name.endsWith('.heic') ||
-    name.endsWith('.heif')
+    <img
+      className={className}
+      src={displaySrc}
+      alt={alt}
+      style={{ objectFit: 'cover', width: '100%', height: '100%' }}
+      onError={() => setBroken(true)}
+    />
   )
 }
 
-function compressImage(file) {
-  return new Promise((resolve, reject) => {
-    if (isHeicFile(file)) {
+async function processAndSavePhoto(file, userId, date, extraPatch = {}) {
+  const compressImage = (inputFile, quality = 0.4, maxDim = 500) => {
+    return new Promise((resolve, reject) => {
       const reader = new FileReader()
-      reader.onload = (e) => resolve(e.target.result)
-      reader.onerror = () => reject(new Error('Could not read file'))
-      reader.readAsDataURL(file)
-      return
-    }
-
-    const img = new Image()
-    const url = URL.createObjectURL(file)
-    img.onload = () => {
-      URL.revokeObjectURL(url)
-      const canvas = document.createElement('canvas')
-      const MAX = 800
-      let w = img.width
-      let h = img.height
-      if (w > MAX || h > MAX) {
-        if (w > h) {
-          h = Math.round((h * MAX) / w)
-          w = MAX
-        } else {
-          w = Math.round((w * MAX) / h)
-          h = MAX
+      reader.onload = (e) => {
+        const img = new Image()
+        img.onload = () => {
+          const canvas = document.createElement('canvas')
+          let w = img.width
+          let h = img.height
+          if (w > maxDim || h > maxDim) {
+            if (w > h) {
+              h = Math.round((h * maxDim) / w)
+              w = maxDim
+            } else {
+              w = Math.round((w * maxDim) / h)
+              h = maxDim
+            }
+          }
+          canvas.width = w
+          canvas.height = h
+          const ctx = canvas.getContext('2d')
+          if (!ctx) {
+            reject(new Error('Could not process image'))
+            return
+          }
+          ctx.drawImage(img, 0, 0, w, h)
+          resolve(canvas.toDataURL('image/jpeg', quality))
         }
+        img.onerror = () => reject(new Error('Could not load image'))
+        img.src = e.target.result
       }
-      canvas.width = w
-      canvas.height = h
-      const ctx = canvas.getContext('2d')
-      if (!ctx) {
-        reject(new Error('Could not process image'))
-        return
-      }
-      ctx.drawImage(img, 0, 0, w, h)
-      resolve(canvas.toDataURL('image/jpeg', 0.7))
-    }
-    img.onerror = () => {
-      URL.revokeObjectURL(url)
-      const reader = new FileReader()
-      reader.onload = (e) => resolve(e.target.result)
       reader.onerror = () => reject(new Error('Could not read file'))
-      reader.readAsDataURL(file)
-    }
-    img.src = url
-  })
-}
-
-async function dataUrlToResizedJpegDataUrl(dataUrl, maxDim, quality) {
-  const img = new Image()
-  await new Promise((resolve, reject) => {
-    img.onload = resolve
-    img.onerror = () => reject(new Error('Could not read image'))
-    img.src = dataUrl
-  })
-  let { width, height } = img
-  const scale = Math.min(1, maxDim / Math.max(width, height, 1))
-  width = Math.round(width * scale)
-  height = Math.round(height * scale)
-  const canvas = document.createElement('canvas')
-  canvas.width = width
-  canvas.height = height
-  const ctx = canvas.getContext('2d')
-  if (!ctx) throw new Error('Could not process image')
-  ctx.drawImage(img, 0, 0, width, height)
-  return canvas.toDataURL('image/jpeg', quality)
-}
-
-/** Compress for storage; keeps existing base64 data URLs in DB unchanged (read-only path). */
-async function encodeProgressPhotoForStorage(file) {
-  const maxBytes = 500 * 1024
-  let dataUrl = await compressImage(file)
-  if (dataUrlByteLength(dataUrl) > maxBytes && String(dataUrl).startsWith('data:image/jpeg')) {
-    dataUrl = await dataUrlToResizedJpegDataUrl(dataUrl, 800, 0.7)
+      reader.readAsDataURL(inputFile)
+    })
   }
-  if (dataUrlByteLength(dataUrl) > maxBytes && String(dataUrl).startsWith('data:image/jpeg')) {
-    dataUrl = await dataUrlToResizedJpegDataUrl(dataUrl, 640, 0.65)
-  }
-  return dataUrl
-}
 
-function mapProgressPhotoSaveError(error) {
-  const msg = String(error?.message ?? error ?? '').trim()
-  if (!msg) return 'Upload failed.'
-  if (/too long|payload|limit|size|exceed|column/i.test(msg)) {
-    return 'Photo is too large to save. Please try a smaller image.'
+  let base64 = await compressImage(file, 0.4, 500)
+  if (base64.length > 500000) base64 = await compressImage(file, 0.3, 400)
+  if (base64.length > 500000) base64 = await compressImage(file, 0.2, 300)
+
+  const { error } = await supabase
+    .from('daily_logs')
+    .update({ progress_photo: base64, ...extraPatch })
+    .eq('user_id', userId)
+    .eq('date', date)
+
+  if (error) {
+    console.error('Supabase save error:', error)
+    throw new Error(`Failed to save: ${error.message}`)
   }
-  return msg
+  return base64
 }
 
 function addDaysISO(iso, delta) {
@@ -574,13 +545,6 @@ function addDaysISO(iso, delta) {
 
 function minDateStr(a, b) {
   return a <= b ? a : b
-}
-
-function isProgressPhotoValue(ph) {
-  if (ph == null || typeof ph !== 'string') return false
-  const t = ph.trim()
-  if (!t) return false
-  return t.startsWith('data:') || /^https?:\/\//i.test(t)
 }
 
 function emptyDayLog(date) {
@@ -1391,14 +1355,15 @@ export default function Dashboard() {
     for (let d = start; d <= windowEnd; d = addDaysISO(d, 1)) {
       const log = logsByDate.get(d)
       const ph = log?.progress_photo
-      const has = isProgressPhotoValue(ph)
+      const src = progressPhotoDisplaySrc(ph)
+      const has = !!src
       const dayNum = challengeDayNumber(start, d)
       if (has) {
         result.push({
           key: `p-${d}-${log?.id ?? d}`,
           date: d,
           dayNum,
-          src: String(ph).trim(),
+          src,
           id: log?.id ?? null,
           kind: 'photo',
         })
@@ -2245,19 +2210,10 @@ export default function Dashboard() {
     setProgressPhotoBusy(true)
     setLoadError('')
     try {
-      const dataUrl = await encodeProgressPhotoForStorage(file)
-      if (dataUrlByteLength(dataUrl) > PROGRESS_PHOTO_MAX_SAVE_BYTES) {
-        setLoadError('Photo is too large to save. Please try a smaller image.')
-        return
-      }
       const hard = !is75Soft(challengeType)
-      const patch = { progress_photo: dataUrl }
-      if (hard) patch.photo_done = true
-      const { error } = await supabase.from('daily_logs').update(patch).eq('id', row0.id)
-      if (error) {
-        setLoadError(mapProgressPhotoSaveError(error))
-        return
-      }
+      const extraPatch = hard ? { photo_done: true } : {}
+      const dataUrl = await processAndSavePhoto(file, uid, targetDate, extraPatch)
+      const patch = { progress_photo: dataUrl, ...extraPatch }
       const merged = { ...row0, ...patch }
       const cal = todayLocalISO()
       if (targetDate === cal) {
@@ -2274,17 +2230,10 @@ export default function Dashboard() {
         copy[idx] = merged
         return copy
       })
-      const kb = (dataUrlByteLength(dataUrl) / 1024).toFixed(1)
-      setProgressPhotoSaveToast(`Photo saved (${kb} KB)`)
+      setProgressPhotoSaveToast('Photo saved ✓')
     } catch (err) {
       const msg = err instanceof Error ? err.message : ''
-      if (msg === 'Could not read file') {
-        setLoadError('Could not read this photo. Try another format or a smaller image.')
-      } else if (msg) {
-        setLoadError(msg)
-      } else {
-        setLoadError('Could not process image.')
-      }
+      setLoadError(msg || 'Could not process image.')
     } finally {
       setProgressPhotoBusy(false)
     }
@@ -3158,8 +3107,8 @@ export default function Dashboard() {
                         onClick={() => progressPhotoInputRef.current?.click()}
                         aria-label="View or change progress photo"
                       >
-                        <img
-                          src={String(displayLog.progress_photo).trim()}
+                        <ProgressPhotoImg
+                          src={displayLog.progress_photo}
                           alt=""
                           className="dash-today-photo-thumb"
                         />
@@ -4334,7 +4283,7 @@ export default function Dashboard() {
                         if (idx >= 0) setPhotoLightbox({ list, index: idx })
                       }}
                     >
-                      <img className="dash-photo-gallery-img" src={cell.src} alt="" />
+                      <ProgressPhotoImg className="dash-photo-gallery-img" src={cell.src} alt="" />
                       <p className="dash-photo-gallery-caption">
                         <span className="dash-photo-gallery-day">Day {cell.dayNum}</span>
                         <span className="dash-photo-gallery-date">{cell.date}</span>
@@ -4564,7 +4513,7 @@ export default function Dashboard() {
                   ‹
                 </button>
               ) : null}
-              <img
+              <ProgressPhotoImg
                 className="dash-photo-lightbox-img"
                 src={photoLightbox.list[photoLightbox.index]?.src}
                 alt=""
@@ -4793,7 +4742,7 @@ export default function Dashboard() {
               ✕ Close
             </button>
             <div className="dash-flipbook-stage">
-              <img
+              <ProgressPhotoImg
                 className="dash-flipbook-img"
                 src={progressPhotosFlipOrder[flipIndex % progressPhotosFlipOrder.length]?.src}
                 alt=""
