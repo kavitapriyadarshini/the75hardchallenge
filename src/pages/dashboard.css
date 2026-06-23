@@ -2300,6 +2300,10 @@
 }
 
 .dash-photo-upload-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
   font-family: inherit;
   font-size: 0.82rem;
   font-weight: 600;
@@ -2309,6 +2313,21 @@
   background: #1a1a1a;
   color: #ddd;
   cursor: pointer;
+}
+
+.dash-photo-upload-spinner {
+  width: 0.85rem;
+  height: 0.85rem;
+  border: 2px solid rgba(224, 123, 57, 0.25);
+  border-top-color: #e07b39;
+  border-radius: 50%;
+  animation: dash-photo-spin 0.7s linear infinite;
+}
+
+@keyframes dash-photo-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .dash-photo-upload-btn:disabled {

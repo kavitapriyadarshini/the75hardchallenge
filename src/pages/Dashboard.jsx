@@ -446,37 +446,82 @@ function typeBadgeClass(type) {
   return 'dash-type-badge dash-type-flex'
 }
 
-async function imageFileToJpegDataUrl(file, maxDim = 1280, quality = 0.82) {
-  const url = URL.createObjectURL(file)
-  try {
-    const img = new Image()
-    await new Promise((resolve, reject) => {
-      img.onload = resolve
-      img.onerror = () => reject(new Error('Could not read image'))
-      img.src = url
-    })
-    let { width, height } = img
-    const scale = Math.min(1, maxDim / Math.max(width, height, 1))
-    width = Math.round(width * scale)
-    height = Math.round(height * scale)
-    const canvas = document.createElement('canvas')
-    canvas.width = width
-    canvas.height = height
-    const ctx = canvas.getContext('2d')
-    if (!ctx) throw new Error('No canvas')
-    ctx.drawImage(img, 0, 0, width, height)
-    return canvas.toDataURL('image/jpeg', quality)
-  } finally {
-    URL.revokeObjectURL(url)
-  }
-}
-
 /** Approximate decoded byte length of a data URL (image payload). */
 function dataUrlByteLength(dataUrl) {
   const idx = dataUrl.indexOf(',')
   const base64 = idx === -1 ? dataUrl : dataUrl.slice(idx + 1)
   const padding = base64.endsWith('==') ? 2 : base64.endsWith('=') ? 1 : 0
   return Math.max(0, (base64.length * 3) / 4 - padding)
+}
+
+const PROGRESS_PHOTO_MAX_FILE_BYTES = 10 * 1024 * 1024
+const PROGRESS_PHOTO_MAX_SAVE_BYTES = 2_500_000
+
+function isAcceptedImageFile(file) {
+  if (!file) return false
+  const type = String(file.type || '').toLowerCase()
+  if (type.startsWith('image/')) return true
+  const name = String(file.name || '').toLowerCase()
+  return /\.(jpe?g|png|heic|heif|webp)$/i.test(name)
+}
+
+function isHeicFile(file) {
+  const type = String(file.type || '').toLowerCase()
+  const name = String(file.name || '').toLowerCase()
+  return (
+    type === 'image/heic' ||
+    type === 'image/heif' ||
+    name.endsWith('.heic') ||
+    name.endsWith('.heif')
+  )
+}
+
+function compressImage(file) {
+  return new Promise((resolve, reject) => {
+    if (isHeicFile(file)) {
+      const reader = new FileReader()
+      reader.onload = (e) => resolve(e.target.result)
+      reader.onerror = () => reject(new Error('Could not read file'))
+      reader.readAsDataURL(file)
+      return
+    }
+
+    const img = new Image()
+    const url = URL.createObjectURL(file)
+    img.onload = () => {
+      URL.revokeObjectURL(url)
+      const canvas = document.createElement('canvas')
+      const MAX = 800
+      let w = img.width
+      let h = img.height
+      if (w > MAX || h > MAX) {
+        if (w > h) {
+          h = Math.round((h * MAX) / w)
+          w = MAX
+        } else {
+          w = Math.round((w * MAX) / h)
+          h = MAX
+        }
+      }
+      canvas.width = w
+      canvas.height = h
+      const ctx = canvas.getContext('2d')
+      if (!ctx) {
+        reject(new Error('Could not process image'))
+        return
+      }
+      ctx.drawImage(img, 0, 0, w, h)
+      resolve(canvas.toDataURL('image/jpeg', 0.7))
+    }
+    img.onerror = () => {
+      URL.revokeObjectURL(url)
+      const reader = new FileReader()
+      reader.onload = (e) => resolve(e.target.result)
+      reader.onerror = () => reject(new Error('Could not read file'))
+      reader.readAsDataURL(file)
+    }
+    img.src = url
+  })
 }
 
 async function dataUrlToResizedJpegDataUrl(dataUrl, maxDim, quality) {
@@ -494,22 +539,31 @@ async function dataUrlToResizedJpegDataUrl(dataUrl, maxDim, quality) {
   canvas.width = width
   canvas.height = height
   const ctx = canvas.getContext('2d')
-  if (!ctx) throw new Error('No canvas')
+  if (!ctx) throw new Error('Could not process image')
   ctx.drawImage(img, 0, 0, width, height)
   return canvas.toDataURL('image/jpeg', quality)
 }
 
-/** Initial encode then shrink if over 500KB (800px max side, JPEG 0.7). */
+/** Compress for storage; keeps existing base64 data URLs in DB unchanged (read-only path). */
 async function encodeProgressPhotoForStorage(file) {
   const maxBytes = 500 * 1024
-  let dataUrl = await imageFileToJpegDataUrl(file, 1280, 0.82)
-  if (dataUrlByteLength(dataUrl) > maxBytes) {
+  let dataUrl = await compressImage(file)
+  if (dataUrlByteLength(dataUrl) > maxBytes && String(dataUrl).startsWith('data:image/jpeg')) {
     dataUrl = await dataUrlToResizedJpegDataUrl(dataUrl, 800, 0.7)
   }
-  if (dataUrlByteLength(dataUrl) > maxBytes) {
+  if (dataUrlByteLength(dataUrl) > maxBytes && String(dataUrl).startsWith('data:image/jpeg')) {
     dataUrl = await dataUrlToResizedJpegDataUrl(dataUrl, 640, 0.65)
   }
   return dataUrl
+}
+
+function mapProgressPhotoSaveError(error) {
+  const msg = String(error?.message ?? error ?? '').trim()
+  if (!msg) return 'Upload failed.'
+  if (/too long|payload|limit|size|exceed|column/i.test(msg)) {
+    return 'Photo is too large to save. Please try a smaller image.'
+  }
+  return msg
 }
 
 function addDaysISO(iso, delta) {
@@ -2172,7 +2226,15 @@ export default function Dashboard() {
   const onProgressPhotoFile = async (e) => {
     const file = e.target.files?.[0]
     e.target.value = ''
-    if (!file || !file.type.startsWith('image/')) return
+    if (!file) return
+    if (!isAcceptedImageFile(file)) {
+      setLoadError('Please choose a JPG, PNG, WEBP, or HEIC image.')
+      return
+    }
+    if (file.size > PROGRESS_PHOTO_MAX_FILE_BYTES) {
+      setLoadError('Photo is too large. Please use a photo under 10MB.')
+      return
+    }
     const uid = userIdRef.current
     const targetDate = viewDateRef.current || todayLocalISO()
     if (!uid) return
@@ -2184,8 +2246,8 @@ export default function Dashboard() {
     setLoadError('')
     try {
       const dataUrl = await encodeProgressPhotoForStorage(file)
-      if (dataUrlByteLength(dataUrl) > 2_500_000) {
-        setLoadError('Image is still too large after compression. Try a smaller photo.')
+      if (dataUrlByteLength(dataUrl) > PROGRESS_PHOTO_MAX_SAVE_BYTES) {
+        setLoadError('Photo is too large to save. Please try a smaller image.')
         return
       }
       const hard = !is75Soft(challengeType)
@@ -2193,7 +2255,7 @@ export default function Dashboard() {
       if (hard) patch.photo_done = true
       const { error } = await supabase.from('daily_logs').update(patch).eq('id', row0.id)
       if (error) {
-        setLoadError(error.message || 'Upload failed')
+        setLoadError(mapProgressPhotoSaveError(error))
         return
       }
       const merged = { ...row0, ...patch }
@@ -2214,8 +2276,15 @@ export default function Dashboard() {
       })
       const kb = (dataUrlByteLength(dataUrl) / 1024).toFixed(1)
       setProgressPhotoSaveToast(`Photo saved (${kb} KB)`)
-    } catch {
-      setLoadError('Could not process image.')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : ''
+      if (msg === 'Could not read file') {
+        setLoadError('Could not read this photo. Try another format or a smaller image.')
+      } else if (msg) {
+        setLoadError(msg)
+      } else {
+        setLoadError('Could not process image.')
+      }
     } finally {
       setProgressPhotoBusy(false)
     }
@@ -3078,7 +3147,7 @@ export default function Dashboard() {
                       id="dash-today-progress-photo"
                       ref={progressPhotoInputRef}
                       type="file"
-                      accept="image/*"
+                      accept="image/*,.heic,.heif"
                       className="dash-photo-file-input"
                       onChange={(e) => void onProgressPhotoFile(e)}
                     />
@@ -3102,11 +3171,16 @@ export default function Dashboard() {
                       disabled={progressPhotoBusy}
                       onClick={() => progressPhotoInputRef.current?.click()}
                     >
-                      {progressPhotoBusy
-                        ? 'Processing…'
-                        : isProgressPhotoValue(displayLog.progress_photo)
-                          ? 'Change photo'
-                          : 'Upload photo'}
+                      {progressPhotoBusy ? (
+                        <>
+                          <span className="dash-photo-upload-spinner" aria-hidden />
+                          Saving photo…
+                        </>
+                      ) : isProgressPhotoValue(displayLog.progress_photo) ? (
+                        'Change photo'
+                      ) : (
+                        'Upload photo'
+                      )}
                     </button>
                   </div>
                 </div>
