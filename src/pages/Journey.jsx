@@ -367,26 +367,6 @@ export default function Journey() {
     </div>
   </article>
 </div>
-              <article className="journey-stat-card journey-stat-card--books">
-                <p className="journey-stat-label">Books</p>
-                {books.length ? (
-                  <ul className="journey-books">
-                    {books.map((b, i) => {
-                      const isCurrent = i === books.length - 1
-                      return (
-                        <li
-                          key={`${b.title}-${i}`}
-                          className={isCurrent ? 'journey-book--reading' : 'journey-book--done'}
-                        >
-                          {b.title} {isCurrent ? '📖 (In Progress)' : '✅'}
-                        </li>
-                      )
-                    })}
-                  </ul>
-                ) : (
-                  <p className="journey-stat-muted">No books logged yet</p>
-                )}
-              </article>
             </div>
           </section>
 
