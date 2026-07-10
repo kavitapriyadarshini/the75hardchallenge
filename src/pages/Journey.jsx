@@ -87,11 +87,16 @@ export default function Journey() {
   const workoutsDone = rpcStats.workouts_done ?? 0
   const readingDays = rpcStats.reading_days ?? 0
 
+  const startDate = journeyData?.current_attempt?.start_date || profile?.start_date
+  const attemptNumber = journeyData?.current_attempt?.attempt_number ?? 1
+  const dayNumber = currentChallengeDay(startDate, today)
+  const priorAttempts = Math.max(0, attemptNumber - 1)
+
   const logsByDate = useMemo(
     () => buildLogsByDate(journeyData?.grid ?? []),
     [journeyData?.grid],
   )
-  
+
   const grid = useMemo(() => {
     if (!startDate) return []
     return buildChallengeGrid(startDate, logsByDate, challengeType, today)
