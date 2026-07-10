@@ -4,7 +4,7 @@
   color: #eaeaea;
   font-family: 'DM Sans', system-ui, sans-serif;
   padding: 1.25rem 1rem 2.5rem;
-  max-width: 480px;
+  max-width: 1100px;
   margin: 0 auto;
 }
 
@@ -73,8 +73,23 @@
   color: #888;
 }
 
+.journey-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1.75rem;
+  margin-top: 0.5rem;
+}
+
+.journey-main {
+  min-width: 0;
+}
+
 .journey-section {
   margin-top: 1.75rem;
+}
+
+.journey-section:first-child {
+  margin-top: 0;
 }
 
 .journey-section-title {
@@ -88,21 +103,26 @@
 
 .journey-grid {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 6px;
+  grid-template-columns: repeat(15, 20px);
+  gap: 2px;
+  width: fit-content;
+  max-width: 100%;
 }
 
 .journey-grid-cell {
-  aspect-ratio: 1;
+  width: 20px;
+  height: 20px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 6px;
-  font-size: 0.68rem;
+  border-radius: 3px;
+  font-size: 0.5rem;
   font-weight: 700;
+  line-height: 1;
   color: #f5f5f5;
   cursor: default;
   user-select: none;
+  flex-shrink: 0;
 }
 
 .journey-grid-cell--complete {
@@ -200,13 +220,23 @@
 
 .journey-books {
   margin: 0.5rem 0 0;
-  padding-left: 1.1rem;
+  padding: 0;
+  list-style: none;
   font-size: 0.88rem;
   color: #ccc;
 }
 
 .journey-books li + li {
-  margin-top: 0.25rem;
+  margin-top: 0.35rem;
+}
+
+.journey-book--done {
+  color: #b8b8b8;
+}
+
+.journey-book--reading {
+  color: #eaeaea;
+  font-weight: 600;
 }
 
 .journey-timeline {
@@ -234,53 +264,70 @@
   background: #e07b39;
 }
 
+.journey-attempt-note {
+  margin: 0.85rem 0 0;
+  font-size: 0.82rem;
+  font-style: italic;
+  color: #777;
+  line-height: 1.45;
+}
+
+.journey-wall {
+  min-width: 0;
+}
+
+.journey-wall-panel {
+  background: #161616;
+  border: 1px solid #2a2a2a;
+  border-radius: 14px;
+  padding: 1rem;
+}
+
+.journey-wall-title {
+  margin: 0 0 1rem;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #eaeaea;
+}
+
 .journey-comments {
   display: flex;
   flex-direction: column;
   gap: 0.65rem;
+  max-height: none;
 }
 
 .journey-comment-card {
-  background: #161616;
-  border: 1px solid #2a2a2a;
-  border-radius: 12px;
-  padding: 0.85rem 1rem;
+  background: #1f1f1f;
+  border: 1px solid #333;
+  border-radius: 10px;
+  padding: 0.75rem 0.85rem;
 }
 
 .journey-comment-name {
   margin: 0;
   font-weight: 700;
-  font-size: 0.92rem;
+  font-size: 0.9rem;
+  color: #e07b39;
 }
 
 .journey-comment-message {
   margin: 0.35rem 0 0;
-  font-size: 0.9rem;
-  color: #ccc;
+  font-size: 0.88rem;
+  color: #fff;
   line-height: 1.45;
   white-space: pre-wrap;
   word-break: break-word;
 }
 
 .journey-comment-time {
-  margin: 0.45rem 0 0;
-  font-size: 0.75rem;
+  margin: 0.4rem 0 0;
+  font-size: 0.72rem;
   color: #666;
 }
 
-.journey-show-more {
-  margin-top: 0.75rem;
-  background: none;
-  border: none;
-  color: #e07b39;
-  font-size: 0.85rem;
-  font-weight: 600;
-  cursor: pointer;
-  padding: 0.25rem 0;
-}
-
 .journey-comment-form {
-  margin-top: 1.25rem;
+  margin-top: 1rem;
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
@@ -327,7 +374,7 @@
 
 .journey-submit-btn {
   margin-top: 0.5rem;
-  align-self: flex-start;
+  width: 100%;
   background: #e07b39;
   color: #111;
   border: none;
@@ -369,12 +416,35 @@
   border-radius: 999px;
 }
 
-@media (min-width: 400px) {
+@media (min-width: 900px) {
+  .journey-body {
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 1.5rem;
+  }
+
+  .journey-main {
+    flex: 0 0 70%;
+    max-width: 70%;
+  }
+
+  .journey-wall {
+    flex: 0 0 calc(30% - 1.5rem);
+    max-width: calc(30% - 1.5rem);
+    position: sticky;
+    top: 1rem;
+    align-self: flex-start;
+  }
+
   .journey-grid {
-    gap: 7px;
+    grid-template-columns: repeat(15, 32px);
+    gap: 3px;
   }
 
   .journey-grid-cell {
-    font-size: 0.72rem;
+    width: 32px;
+    height: 32px;
+    font-size: 0.62rem;
+    border-radius: 4px;
   }
 }

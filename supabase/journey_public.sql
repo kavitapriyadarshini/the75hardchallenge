@@ -63,6 +63,7 @@ DECLARE
   v_start_date date;
   v_current_attempt attempts%ROWTYPE;
   v_log_end date;
+  v_stats jsonb;
 BEGIN
   SELECT up.user_id, up.username, up.challenge_type, up.start_date
   INTO v_user_id, v_username, v_challenge_type, v_start_date
@@ -93,8 +94,14 @@ BEGIN
       'current_attempt', NULL,
       'attempts', '[]'::jsonb,
       'logs', '[]'::jsonb,
+      'stats', jsonb_build_object(
+        'days_logged', 0,
+        'total_water_ml', 0,
+        'workouts_done', 0,
+        'reading_days', 0
+      ),
       'books', (
-        SELECT coalesce(jsonb_agg(jsonb_build_object('title', b.title) ORDER BY b.created_at DESC), '[]'::jsonb)
+        SELECT coalesce(jsonb_agg(jsonb_build_object('title', b.title) ORDER BY b.created_at ASC), '[]'::jsonb)
         FROM reading_books b
         WHERE b.user_id = v_user_id
       ),
@@ -103,6 +110,34 @@ BEGIN
   END IF;
 
   v_log_end := v_current_attempt.start_date + 74;
+
+  SELECT coalesce(
+    jsonb_build_object(
+      'days_logged', count(*) FILTER (WHERE
+        coalesce(d.diet_done, false)
+        OR coalesce(d.workout_1_done, d.indoor_done, false)
+        OR coalesce(d.workout_2_done, d.outdoor_done, false)
+        OR coalesce(d.reading_done, false)
+        OR coalesce(d.photo_done, false)
+        OR coalesce(d.water_ml, 0) > 0
+        OR coalesce(d.is_recovery_day, false)
+      ),
+      'total_water_ml', coalesce(sum(d.water_ml), 0),
+      'workouts_done', count(*) FILTER (WHERE coalesce(d.workout_1_done, d.indoor_done, false)),
+      'reading_days', count(*) FILTER (WHERE coalesce(d.reading_done, false))
+    ),
+    jsonb_build_object(
+      'days_logged', 0,
+      'total_water_ml', 0,
+      'workouts_done', 0,
+      'reading_days', 0
+    )
+  )
+  INTO v_stats
+  FROM daily_logs d
+  WHERE d.user_id = v_user_id
+    AND d.date >= v_current_attempt.start_date
+    AND d.date <= v_log_end;
 
   RETURN jsonb_build_object(
     'profile', jsonb_build_object(
@@ -160,9 +195,10 @@ BEGIN
         AND d.date >= v_current_attempt.start_date
         AND d.date <= v_log_end
     ),
+    'stats', v_stats,
     'books', (
       SELECT coalesce(
-        jsonb_agg(jsonb_build_object('title', b.title) ORDER BY b.created_at DESC),
+        jsonb_agg(jsonb_build_object('title', b.title) ORDER BY b.created_at ASC),
         '[]'::jsonb
       )
       FROM reading_books b

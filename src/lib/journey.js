@@ -32,9 +32,9 @@ export function minDateStr(a, b) {
 
 export function formatJourneyDisplayName(username) {
   if (!username) return 'User'
-  const local = String(username).includes('@') ? String(username).split('@')[0] : String(username)
-  if (!local) return 'User'
-  return local.charAt(0).toUpperCase() + local.slice(1)
+  const letters = String(username).replace(/[^a-zA-Z]/g, '')
+  if (!letters) return 'User'
+  return letters.charAt(0).toUpperCase() + letters.slice(1).toLowerCase()
 }
 
 export function challengeBadgeLabel(challengeType) {
