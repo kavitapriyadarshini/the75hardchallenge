@@ -86,7 +86,29 @@ export default function Journey() {
   const totalWaterLabel = `${((Number(rpcStats.total_water_ml) || 0) / 1000).toFixed(1)}L`
   const workoutsDone = rpcStats.workouts_done ?? 0
   const readingDays = rpcStats.reading_days ?? 0
-
+  const workoutBreakdown = useMemo(() => {
+    const counts = {}
+    for (const log of journeyData?.grid ?? []) {
+      if (log.workout_1_done && log.workout_1_name) {
+        counts[log.workout_1_name] = (counts[log.workout_1_name] || 0) + 1
+      }
+      if (log.workout_2_done && log.workout_2_name) {
+        counts[log.workout_2_name] = (counts[log.workout_2_name] || 0) + 1
+      }
+    }
+    return Object.entries(counts).sort((a, b) => b[1] - a[1])
+  }, [journeyData?.grid])
+  
+  const readingBreakdown = useMemo(() => {
+    const counts = {}
+    for (const log of journeyData?.grid ?? []) {
+      if (log.reading_done && log.reading_log?.book_title) {
+        const title = log.reading_log.book_title
+        counts[title] = (counts[title] || 0) + 1
+      }
+    }
+    return Object.entries(counts)
+  }, [journeyData?.grid])
   const startDate = journeyData?.current_attempt?.start_date || profile?.start_date
   const attemptNumber = journeyData?.current_attempt?.attempt_number ?? 1
   const dayNumber = currentChallengeDay(startDate, today)
@@ -315,14 +337,35 @@ export default function Journey() {
                 <p className="journey-stat-value">{totalWaterLabel}</p>
                 <p className="journey-stat-label">Total Water</p>
               </article>
-              <article className="journey-stat-card">
-                <p className="journey-stat-value">{workoutsDone}</p>
-                <p className="journey-stat-label">Workouts Done</p>
-              </article>
-              <article className="journey-stat-card">
-                <p className="journey-stat-value">{readingDays}</p>
-                <p className="journey-stat-label">Reading Days</p>
-              </article>
+              <article className="journey-stat-card journey-stat-card--books">
+  <p className="journey-stat-value">{workoutsDone * 2}</p>
+  <p className="journey-stat-label">Workouts Done</p>
+  {workoutBreakdown.length > 0 && (
+    <ul className="journey-books" style={{marginTop: '0.5rem'}}>
+      {workoutBreakdown.map(([name, count]) => (
+        <li key={name} className="journey-book--done">
+          {name} — {count}x
+        </li>
+      ))}
+    </ul>
+  )}
+</article>
+<article className="journey-stat-card journey-stat-card--books">
+  <p className="journey-stat-value">{readingDays}</p>
+  <p className="journey-stat-label">Reading Days</p>
+  {readingBreakdown.length > 0 && (
+    <ul className="journey-books" style={{marginTop: '0.5rem'}}>
+      {readingBreakdown.map(([title, days]) => {
+        const isCurrent = books[books.length - 1]?.title === title
+        return (
+          <li key={title} className={isCurrent ? 'journey-book--reading' : 'journey-book--done'}>
+            {title} — {days} days {isCurrent ? '📖' : '✅'}
+          </li>
+        )
+      })}
+    </ul>
+  )}
+</article>
               <article className="journey-stat-card journey-stat-card--books">
                 <p className="journey-stat-label">Books</p>
                 {books.length ? (
