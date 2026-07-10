@@ -270,9 +270,11 @@ export default function Journey() {
   return (
     <div className="journey-page">
       <header className="journey-hero">
-        <p className="journey-hero-day">
-          DAY <span>{dayNumber}</span> of 75
-        </p>
+  <p className="journey-hero-name">75 Hard Progress of {profile?.display_name || displayName}</p>
+  <p className="journey-hero-day">
+    DAY <span>{dayNumber}</span> of 75
+  </p>
+  <p className="journey-days-left">{Math.max(0, 75 - dayNumber)} days to go</p>
         <span
           className={`journey-badge ${soft ? 'journey-badge--soft' : 'journey-badge--hard'}`}
         >
