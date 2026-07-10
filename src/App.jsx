@@ -12,7 +12,7 @@ import Journey from './pages/Journey.jsx'
 
 const AUTH_ENTRY_PATHS = ['/', '/signup']
 
-function isPublicJourneyPath(pathname) {
+export function isPublicJourneyPath(pathname) {
   return pathname.startsWith('/journey/')
 }
 
@@ -66,19 +66,28 @@ function AuthBootstrap({ children }) {
   return children
 }
 
+function AuthenticatedAppRoutes() {
+  return (
+    <AuthBootstrap>
+      <Routes>
+        <Route path="/" element={<Login />} />
+        <Route path="/signup" element={<Signup />} />
+        <Route path="/challenge-select" element={<ChallengeSelect />} />
+        <Route path="/onboarding" element={<Onboarding />} />
+        <Route path="/dashboard" element={<Dashboard />} />
+      </Routes>
+    </AuthBootstrap>
+  )
+}
+
 export default function App() {
   return (
     <BrowserRouter>
-      <AuthBootstrap>
-        <Routes>
-          <Route path="/" element={<Login />} />
-          <Route path="/signup" element={<Signup />} />
-          <Route path="/challenge-select" element={<ChallengeSelect />} />
-          <Route path="/onboarding" element={<Onboarding />} />
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/journey/:username" element={<Journey />} />
-        </Routes>
-      </AuthBootstrap>
+      <Routes>
+        {/* Public — no auth bootstrap, no session check */}
+        <Route path="/journey/:username" element={<Journey />} />
+        <Route path="*" element={<AuthenticatedAppRoutes />} />
+      </Routes>
     </BrowserRouter>
   )
 }
