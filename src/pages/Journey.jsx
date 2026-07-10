@@ -88,20 +88,14 @@ export default function Journey() {
   const readingDays = rpcStats.reading_days ?? 0
 
   const logsByDate = useMemo(
-    () => buildLogsByDate(journeyData?.logs ?? []),
-    [journeyData?.logs],
+    () => buildLogsByDate(journeyData?.grid ?? []),
+    [journeyData?.grid],
   )
-
-  const startDate = journeyData?.current_attempt?.start_date || profile?.start_date
-  const attemptNumber = journeyData?.current_attempt?.attempt_number ?? 1
-  const dayNumber = currentChallengeDay(startDate, today)
-  const priorAttempts = Math.max(0, attemptNumber - 1)
-
+  
   const grid = useMemo(() => {
-    // removed — always build grid client-side from logs for accuracy
     if (!startDate) return []
     return buildChallengeGrid(startDate, logsByDate, challengeType, today)
-  }, [journeyData?.grid, startDate, logsByDate, challengeType, today])
+  }, [startDate, logsByDate, challengeType, today])
 
   const attemptTimeline = useMemo(
     () => buildAttemptTimeline(attempts, today),
