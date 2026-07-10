@@ -8,7 +8,13 @@ import ChallengeSelect from './pages/ChallengeSelect.jsx'
 import Onboarding from './pages/Onboarding.jsx'
 import Dashboard from './pages/Dashboard.jsx'
 
+import Journey from './pages/Journey.jsx'
+
 const AUTH_ENTRY_PATHS = ['/', '/signup']
+
+function isPublicJourneyPath(pathname) {
+  return pathname.startsWith('/journey/')
+}
 
 function AuthBootstrap({ children }) {
   const navigate = useNavigate()
@@ -37,7 +43,7 @@ function AuthBootstrap({ children }) {
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (cancelled) return
       if (event === 'SIGNED_OUT') {
-        if (!AUTH_ENTRY_PATHS.includes(location.pathname)) {
+        if (!AUTH_ENTRY_PATHS.includes(location.pathname) && !isPublicJourneyPath(location.pathname)) {
           navigate('/', { replace: true })
         }
         return
@@ -70,6 +76,7 @@ export default function App() {
           <Route path="/challenge-select" element={<ChallengeSelect />} />
           <Route path="/onboarding" element={<Onboarding />} />
           <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/journey/:username" element={<Journey />} />
         </Routes>
       </AuthBootstrap>
     </BrowserRouter>

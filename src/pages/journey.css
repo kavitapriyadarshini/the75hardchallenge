@@ -1,0 +1,380 @@
+.journey-page {
+  min-height: 100dvh;
+  background: #0f0f0f;
+  color: #eaeaea;
+  font-family: 'DM Sans', system-ui, sans-serif;
+  padding: 1.25rem 1rem 2.5rem;
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+.journey-loading,
+.journey-empty {
+  padding: 3rem 1rem;
+  text-align: center;
+}
+
+.journey-empty h1 {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 2rem;
+  letter-spacing: 0.04em;
+  margin: 0 0 0.5rem;
+}
+
+.journey-hero {
+  text-align: center;
+  padding: 1.5rem 0 1.75rem;
+}
+
+.journey-hero-day {
+  margin: 0;
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: clamp(2.75rem, 12vw, 3.5rem);
+  line-height: 1;
+  letter-spacing: 0.06em;
+  color: #eaeaea;
+}
+
+.journey-hero-day span {
+  color: #e07b39;
+}
+
+.journey-badge {
+  display: inline-block;
+  margin-top: 0.85rem;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  padding: 0.35rem 0.65rem;
+  border-radius: 6px;
+}
+
+.journey-badge--hard {
+  background: rgba(224, 123, 57, 0.2);
+  border: 1px solid rgba(224, 123, 57, 0.55);
+  color: #ffb37a;
+}
+
+.journey-badge--soft {
+  background: rgba(106, 191, 94, 0.18);
+  border: 1px solid rgba(106, 191, 94, 0.45);
+  color: #8fd67f;
+}
+
+.journey-hero-tagline {
+  margin: 0.85rem 0 0;
+  font-size: 0.95rem;
+  color: #b8b8b8;
+}
+
+.journey-visitor-count {
+  margin: 0.65rem 0 0;
+  font-size: 0.82rem;
+  color: #888;
+}
+
+.journey-section {
+  margin-top: 1.75rem;
+}
+
+.journey-section-title {
+  margin: 0 0 0.85rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #888;
+}
+
+.journey-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+}
+
+.journey-grid-cell {
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #f5f5f5;
+  cursor: default;
+  user-select: none;
+}
+
+.journey-grid-cell--complete {
+  background: #3d9b4a;
+}
+
+.journey-grid-cell--partial {
+  background: #e07b39;
+}
+
+.journey-grid-cell--future,
+.journey-grid-cell--empty {
+  background: #2a2a2a;
+  color: #666;
+}
+
+.journey-grid-cell--missed {
+  background: #8b2e2e;
+}
+
+.journey-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem 1rem;
+  margin-top: 0.85rem;
+  font-size: 0.72rem;
+  color: #888;
+}
+
+.journey-legend-swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  margin-right: 0.35rem;
+  vertical-align: middle;
+}
+
+.journey-legend-swatch--complete {
+  background: #3d9b4a;
+}
+
+.journey-legend-swatch--partial {
+  background: #e07b39;
+}
+
+.journey-legend-swatch--future {
+  background: #2a2a2a;
+}
+
+.journey-legend-swatch--missed {
+  background: #8b2e2e;
+}
+
+.journey-stats {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.65rem;
+}
+
+.journey-stat-card {
+  background: #161616;
+  border: 1px solid #2a2a2a;
+  border-radius: 12px;
+  padding: 0.85rem 0.9rem;
+}
+
+.journey-stat-card--books {
+  grid-column: 1 / -1;
+}
+
+.journey-stat-value {
+  margin: 0;
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 2rem;
+  line-height: 1;
+  color: #e07b39;
+  letter-spacing: 0.04em;
+}
+
+.journey-stat-label {
+  margin: 0.35rem 0 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #888;
+}
+
+.journey-stat-muted {
+  margin: 0.35rem 0 0;
+  font-size: 0.85rem;
+  color: #666;
+}
+
+.journey-books {
+  margin: 0.5rem 0 0;
+  padding-left: 1.1rem;
+  font-size: 0.88rem;
+  color: #ccc;
+}
+
+.journey-books li + li {
+  margin-top: 0.25rem;
+}
+
+.journey-timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-left: 2px solid #333;
+}
+
+.journey-timeline-item {
+  position: relative;
+  padding: 0.65rem 0 0.65rem 1rem;
+  font-size: 0.9rem;
+  color: #ccc;
+}
+
+.journey-timeline-item::before {
+  content: '';
+  position: absolute;
+  left: -5px;
+  top: 1rem;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #e07b39;
+}
+
+.journey-comments {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.journey-comment-card {
+  background: #161616;
+  border: 1px solid #2a2a2a;
+  border-radius: 12px;
+  padding: 0.85rem 1rem;
+}
+
+.journey-comment-name {
+  margin: 0;
+  font-weight: 700;
+  font-size: 0.92rem;
+}
+
+.journey-comment-message {
+  margin: 0.35rem 0 0;
+  font-size: 0.9rem;
+  color: #ccc;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.journey-comment-time {
+  margin: 0.45rem 0 0;
+  font-size: 0.75rem;
+  color: #666;
+}
+
+.journey-show-more {
+  margin-top: 0.75rem;
+  background: none;
+  border: none;
+  color: #e07b39;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0.25rem 0;
+}
+
+.journey-comment-form {
+  margin-top: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.journey-form-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #888;
+  margin-top: 0.35rem;
+}
+
+.journey-form-input,
+.journey-form-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  background: #161616;
+  border: 1px solid #333;
+  border-radius: 10px;
+  color: #eaeaea;
+  font: inherit;
+  padding: 0.65rem 0.75rem;
+}
+
+.journey-form-textarea {
+  resize: vertical;
+  min-height: 4.5rem;
+}
+
+.journey-char-count {
+  margin: 0;
+  font-size: 0.72rem;
+  color: #666;
+  text-align: right;
+}
+
+.journey-comment-success {
+  margin: 0.25rem 0 0;
+  font-size: 0.88rem;
+  color: #6abf5e;
+}
+
+.journey-submit-btn {
+  margin-top: 0.5rem;
+  align-self: flex-start;
+  background: #e07b39;
+  color: #111;
+  border: none;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 0.9rem;
+  padding: 0.65rem 1.25rem;
+  cursor: pointer;
+}
+
+.journey-submit-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.journey-cta-banner {
+  margin-top: 2.5rem;
+  padding: 1.25rem 1rem;
+  text-align: center;
+  background: linear-gradient(180deg, #1a1a1a 0%, #121212 100%);
+  border: 1px solid #2a2a2a;
+  border-radius: 14px;
+}
+
+.journey-cta-text {
+  margin: 0 0 0.85rem;
+  font-size: 0.95rem;
+  color: #ccc;
+}
+
+.journey-cta-btn {
+  display: inline-block;
+  background: #e07b39;
+  color: #111;
+  text-decoration: none;
+  font-weight: 700;
+  font-size: 0.9rem;
+  padding: 0.7rem 1.15rem;
+  border-radius: 999px;
+}
+
+@media (min-width: 400px) {
+  .journey-grid {
+    gap: 7px;
+  }
+
+  .journey-grid-cell {
+    font-size: 0.72rem;
+  }
+}

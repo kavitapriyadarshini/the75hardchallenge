@@ -31,6 +31,7 @@ import {
   recoveryDayUsedElsewhereInWeek,
   challengeDayNumber,
 } from '../lib/challenge'
+import { journeyShareUrl } from '../lib/journey'
 import './dashboard.css'
 
 const CHALLENGE_DAYS = 75
@@ -1042,6 +1043,7 @@ export default function Dashboard() {
   const [profileStartDateDraft, setProfileStartDateDraft] = useState('')
   const [profileStartDateBusy, setProfileStartDateBusy] = useState(false)
   const [profileStartDateConfirm, setProfileStartDateConfirm] = useState('')
+  const [journeyShareToast, setJourneyShareToast] = useState('')
   const [showAllMissingLogs, setShowAllMissingLogs] = useState(false)
   const [macroRecalibratedToast, setMacroRecalibratedToast] = useState('')
   const [progressPhotoSaveToast, setProgressPhotoSaveToast] = useState('')
@@ -4426,7 +4428,27 @@ export default function Dashboard() {
               >
                 Switch Challenge
               </button>
+              {profile.username?.trim() ? (
+                <button
+                  type="button"
+                  className="dash-profile-share-journey"
+                  onClick={() => {
+                    const url = journeyShareUrl(profile.username)
+                    void navigator.clipboard.writeText(url).then(() => {
+                      setJourneyShareToast('Link copied! Share your journey 🔗')
+                      window.setTimeout(() => setJourneyShareToast(''), 4000)
+                    })
+                  }}
+                >
+                  Share my journey
+                </button>
+              ) : null}
             </div>
+            {journeyShareToast ? (
+              <p className="dash-macro-toast" role="status">
+                {journeyShareToast}
+              </p>
+            ) : null}
           </>
         )}
       </main>
