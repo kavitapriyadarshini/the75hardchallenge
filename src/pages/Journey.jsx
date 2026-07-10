@@ -337,35 +337,36 @@ export default function Journey() {
                 <p className="journey-stat-value">{totalWaterLabel}</p>
                 <p className="journey-stat-label">Total Water</p>
               </article>
-              <article className="journey-stat-card journey-stat-card--books">
-  <p className="journey-stat-value">{workoutsDone * 2}</p>
-  <p className="journey-stat-label">Workouts Done</p>
-  {workoutBreakdown.length > 0 && (
-    <ul className="journey-books" style={{marginTop: '0.5rem'}}>
+              <div className="journey-activity-row">
+  <article className="journey-stat-card journey-activity-card">
+    <p className="journey-stat-label">Workouts Done</p>
+    <p className="journey-stat-value">{workoutsDone * 2}</p>
+    <div className="journey-activity-chips">
       {workoutBreakdown.map(([name, count]) => (
-        <li key={name} className="journey-book--done">
-          {name} — {count}x
-        </li>
+        <div key={name} className="journey-activity-chip">
+          <span className="journey-chip-count">{count}x</span>
+          <span className="journey-chip-name">{name}</span>
+        </div>
       ))}
-    </ul>
-  )}
-</article>
-<article className="journey-stat-card journey-stat-card--books">
-  <p className="journey-stat-value">{readingDays}</p>
-  <p className="journey-stat-label">Reading Days</p>
-  {readingBreakdown.length > 0 && (
-    <ul className="journey-books" style={{marginTop: '0.5rem'}}>
+    </div>
+  </article>
+
+  <article className="journey-stat-card journey-activity-card">
+    <p className="journey-stat-label">Reading Days</p>
+    <p className="journey-stat-value">{readingDays}</p>
+    <div className="journey-activity-chips">
       {readingBreakdown.map(([title, days]) => {
         const isCurrent = books[books.length - 1]?.title === title
         return (
-          <li key={title} className={isCurrent ? 'journey-book--reading' : 'journey-book--done'}>
-            {title} — {days} days {isCurrent ? '📖' : '✅'}
-          </li>
+          <div key={title} className={`journey-activity-chip ${isCurrent ? 'journey-activity-chip--current' : ''}`}>
+            <span className="journey-chip-count">{days}d</span>
+            <span className="journey-chip-name">{title} {isCurrent ? '📖' : '✅'}</span>
+          </div>
         )
       })}
-    </ul>
-  )}
-</article>
+    </div>
+  </article>
+</div>
               <article className="journey-stat-card journey-stat-card--books">
                 <p className="journey-stat-label">Books</p>
                 {books.length ? (
