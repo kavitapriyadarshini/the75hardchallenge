@@ -98,7 +98,7 @@ export default function Journey() {
   const priorAttempts = Math.max(0, attemptNumber - 1)
 
   const grid = useMemo(() => {
-    if (journeyData?.grid?.length) return journeyData.grid
+    // removed — always build grid client-side from logs for accuracy
     if (!startDate) return []
     return buildChallengeGrid(startDate, logsByDate, challengeType, today)
   }, [journeyData?.grid, startDate, logsByDate, challengeType, today])
