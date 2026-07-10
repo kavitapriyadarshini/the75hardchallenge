@@ -277,7 +277,7 @@ export default function Journey() {
                 <div
                   key={cell.day}
                   role="listitem"
-                  className={`journey-grid-cell journey-grid-cell--${cell.status}`}
+                  className={`journey-grid-cell journey-grid-cell--${cell.status}${cell.date === today ? ' journey-grid-cell--today' : ''}`}
                   title={`Day ${cell.day} — ${cell.label}`}
                   aria-label={`Day ${cell.day} — ${cell.label}`}
                 >
