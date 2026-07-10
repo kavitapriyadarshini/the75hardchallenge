@@ -31,24 +31,54 @@ function isValidUuid(value) {
   return UUID_RE.test(s)
 }
 
+function parseJourneyRpcResponse(raw) {
+  if (raw == null) return null
+
+  let parsed = raw
+  if (typeof raw === 'string') {
+    try {
+      parsed = JSON.parse(raw)
+    } catch {
+      return null
+    }
+  }
+
+  if (!parsed || parsed.error || !parsed.profile) return null
+  if (!isValidUuid(parsed.profile.user_id)) return null
+
+  return {
+    profile: parsed.profile,
+    current_attempt: parsed.current_attempt ?? null,
+    attempts: Array.isArray(parsed.attempts) ? parsed.attempts : [],
+    logs: Array.isArray(parsed.logs) ? parsed.logs : [],
+    books: Array.isArray(parsed.books) ? parsed.books : [],
+    comments: Array.isArray(parsed.comments) ? parsed.comments : null,
+    stats: parsed.stats ?? null,
+    grid: Array.isArray(parsed.grid) ? parsed.grid : null,
+    visitor_count: parsed.visitor_count ?? parsed.view_count ?? 0,
+  }
+}
+
 async function fetchJourneyPage(username) {
   const slug = String(username ?? '').trim()
   if (!slug) {
-    return { data: null, error: null, notFound: true }
+    return { parsed: null, error: null, notFound: true }
   }
 
   const { data, error } = await supabase.rpc('get_journey_page_data', {
     p_username: slug,
   })
 
-  if (error) {
-    return { data: null, error, notFound: true }
-  }
-  if (!data?.profile || !isValidUuid(data.profile.user_id)) {
-    return { data: null, error: null, notFound: true }
+  if (error || !data) {
+    return { parsed: null, error: error ?? null, notFound: true }
   }
 
-  return { data, error: null, notFound: false }
+  const parsed = parseJourneyRpcResponse(data)
+  if (!parsed) {
+    return { parsed: null, error: null, notFound: true }
+  }
+
+  return { parsed, error: null, notFound: false }
 }
 
 async function fetchComments(profileUserId, limit, offset) {
@@ -87,6 +117,8 @@ export default function Journey() {
   const challengeType = profile?.challenge_type
   const displayName = formatJourneyDisplayName(profile?.username || username)
   const profileUserId = isValidUuid(profile?.user_id) ? profile.user_id : null
+  const books = payload?.books ?? []
+  const attempts = payload?.attempts ?? []
 
   const logsByDate = useMemo(
     () => buildLogsByDate(payload?.logs ?? []),
@@ -97,22 +129,20 @@ export default function Journey() {
   const attemptNumber = payload?.current_attempt?.attempt_number ?? 1
   const dayNumber = currentChallengeDay(startDate, today)
 
-  const grid = useMemo(
-    () =>
-      startDate
-        ? buildChallengeGrid(startDate, logsByDate, challengeType, today)
-        : [],
-    [startDate, logsByDate, challengeType, today],
-  )
+  const grid = useMemo(() => {
+    if (payload?.grid?.length) return payload.grid
+    if (!startDate) return []
+    return buildChallengeGrid(startDate, logsByDate, challengeType, today)
+  }, [payload?.grid, startDate, logsByDate, challengeType, today])
 
-  const stats = useMemo(
-    () => computeJourneyStats(payload?.logs ?? [], challengeType),
-    [payload?.logs, challengeType],
-  )
+  const stats = useMemo(() => {
+    if (payload?.stats) return payload.stats
+    return computeJourneyStats(payload?.logs ?? [], challengeType)
+  }, [payload?.stats, payload?.logs, challengeType])
 
   const attemptTimeline = useMemo(
-    () => buildAttemptTimeline(payload?.attempts ?? [], today),
-    [payload?.attempts, today],
+    () => buildAttemptTimeline(attempts, today),
+    [attempts, today],
   )
 
   const loadComments = useCallback(async (uid, visibleCount) => {
@@ -130,17 +160,20 @@ export default function Journey() {
 
     ;(async () => {
       try {
-        const { data, error, notFound: journeyNotFound } = await fetchJourneyPage(username)
+        const { parsed, error, notFound: journeyNotFound } = await fetchJourneyPage(username)
         if (cancelled) return
-        if (journeyNotFound || error || !data?.profile) {
+        if (journeyNotFound || error || !parsed?.profile) {
           setNotFound(true)
           setPayload(null)
           return
         }
-        setPayload(data)
-        setViewCount(data.view_count ?? 0)
-        if (isValidUuid(data.profile.user_id)) {
-          await loadComments(data.profile.user_id, COMMENTS_PAGE)
+        setPayload(parsed)
+        setViewCount(parsed.visitor_count ?? 0)
+        if (parsed.comments) {
+          setComments(parsed.comments.slice(0, COMMENTS_PAGE))
+          setHasMoreComments(parsed.comments.length > COMMENTS_PAGE)
+        } else if (isValidUuid(parsed.profile.user_id)) {
+          await loadComments(parsed.profile.user_id, COMMENTS_PAGE)
         }
       } catch {
         if (!cancelled) {
@@ -343,9 +376,9 @@ export default function Journey() {
           </article>
           <article className="journey-stat-card journey-stat-card--books">
             <p className="journey-stat-label">Books</p>
-            {payload.books?.length ? (
+            {books.length ? (
               <ul className="journey-books">
-                {payload.books.map((b, i) => (
+                {books.map((b, i) => (
                   <li key={`${b.title}-${i}`}>{b.title}</li>
                 ))}
               </ul>
