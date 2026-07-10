@@ -18,16 +18,42 @@ import './journey.css'
 
 const COMMENTS_PAGE = 10
 const COMMENT_COOLDOWN_MS = 30_000
+const JOURNEY_NOT_FOUND_MESSAGE =
+  'Journey not found. The username may be incorrect.'
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+function isValidUuid(value) {
+  if (value == null || value === '') return false
+  const s = String(value).trim()
+  if (s === 'undefined' || s === 'null') return false
+  return UUID_RE.test(s)
+}
 
 async function fetchJourneyPage(username) {
+  const slug = String(username ?? '').trim()
+  if (!slug) {
+    return { data: null, error: null, notFound: true }
+  }
+
   const { data, error } = await supabase.rpc('get_journey_page_data', {
-    p_username: username,
+    p_username: slug,
   })
-  if (error) throw error
-  return data
+
+  if (error) {
+    return { data: null, error, notFound: true }
+  }
+  if (!data?.profile || !isValidUuid(data.profile.user_id)) {
+    return { data: null, error: null, notFound: true }
+  }
+
+  return { data, error: null, notFound: false }
 }
 
 async function fetchComments(profileUserId, limit, offset) {
+  if (!isValidUuid(profileUserId)) return []
+
   const { data, error } = await supabase
     .from('journey_comments')
     .select('id, commenter_name, message, created_at')
@@ -60,7 +86,7 @@ export default function Journey() {
   const profile = payload?.profile
   const challengeType = profile?.challenge_type
   const displayName = formatJourneyDisplayName(profile?.username || username)
-  const profileUserId = profile?.user_id
+  const profileUserId = isValidUuid(profile?.user_id) ? profile.user_id : null
 
   const logsByDate = useMemo(
     () => buildLogsByDate(payload?.logs ?? []),
@@ -89,14 +115,12 @@ export default function Journey() {
     [payload?.attempts, today],
   )
 
-  const loadComments = useCallback(
-    async (uid, visibleCount) => {
-      const rows = await fetchComments(uid, visibleCount + 1, 0)
-      setHasMoreComments(rows.length > visibleCount)
-      setComments(rows.slice(0, visibleCount))
-    },
-    [],
-  )
+  const loadComments = useCallback(async (uid, visibleCount) => {
+    if (!isValidUuid(uid)) return
+    const rows = await fetchComments(uid, visibleCount + 1, 0)
+    setHasMoreComments(rows.length > visibleCount)
+    setComments(rows.slice(0, visibleCount))
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -106,19 +130,22 @@ export default function Journey() {
 
     ;(async () => {
       try {
-        const data = await fetchJourneyPage(username)
+        const { data, error, notFound: journeyNotFound } = await fetchJourneyPage(username)
         if (cancelled) return
-        if (!data?.profile) {
+        if (journeyNotFound || error || !data?.profile) {
           setNotFound(true)
           setPayload(null)
           return
         }
         setPayload(data)
         setViewCount(data.view_count ?? 0)
-        await loadComments(data.profile.user_id, COMMENTS_PAGE)
-      } catch (err) {
+        if (isValidUuid(data.profile.user_id)) {
+          await loadComments(data.profile.user_id, COMMENTS_PAGE)
+        }
+      } catch {
         if (!cancelled) {
-          setLoadError(err?.message || 'Could not load this journey.')
+          setNotFound(true)
+          setPayload(null)
         }
       } finally {
         if (!cancelled) setLoading(false)
@@ -139,7 +166,7 @@ export default function Journey() {
   }, [displayName, dayNumber, profileUserId])
 
   useEffect(() => {
-    if (!profileUserId) return
+    if (!isValidUuid(profileUserId)) return
 
     let cancelled = false
     ;(async () => {
@@ -158,7 +185,7 @@ export default function Journey() {
   }, [profileUserId])
 
   async function handleShowMoreComments() {
-    if (!profileUserId) return
+    if (!isValidUuid(profileUserId)) return
     const next = commentsVisible + COMMENTS_PAGE
     setCommentsVisible(next)
     try {
@@ -170,7 +197,7 @@ export default function Journey() {
 
   async function handleSubmitComment(e) {
     e.preventDefault()
-    if (!profileUserId || commentCooldown || commentBusy) return
+    if (!isValidUuid(profileUserId) || commentCooldown || commentBusy) return
 
     const name = commentName.trim().slice(0, 50)
     const message = commentMessage.trim().slice(0, 200)
@@ -215,7 +242,7 @@ export default function Journey() {
       <div className="journey-page">
         <div className="journey-empty">
           <h1>Journey not found</h1>
-          <p>No public profile exists for &ldquo;{username}&rdquo;.</p>
+          <p>{JOURNEY_NOT_FOUND_MESSAGE}</p>
           <Link to="/" className="journey-cta-btn">
             Start for free — unlock75.app
           </Link>
