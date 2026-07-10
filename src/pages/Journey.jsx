@@ -31,56 +31,6 @@ function isValidUuid(value) {
   return UUID_RE.test(s)
 }
 
-function parseJourneyRpcResponse(raw) {
-  if (raw == null) return null
-
-  let parsed = raw
-  if (typeof raw === 'string') {
-    try {
-      parsed = JSON.parse(raw)
-    } catch {
-      return null
-    }
-  }
-
-  if (!parsed || parsed.error || !parsed.profile) return null
-  if (!isValidUuid(parsed.profile.user_id)) return null
-
-  return {
-    profile: parsed.profile,
-    current_attempt: parsed.current_attempt ?? null,
-    attempts: Array.isArray(parsed.attempts) ? parsed.attempts : [],
-    logs: Array.isArray(parsed.logs) ? parsed.logs : [],
-    books: Array.isArray(parsed.books) ? parsed.books : [],
-    comments: Array.isArray(parsed.comments) ? parsed.comments : null,
-    stats: parsed.stats ?? null,
-    grid: Array.isArray(parsed.grid) ? parsed.grid : null,
-    visitor_count: parsed.visitor_count ?? parsed.view_count ?? 0,
-  }
-}
-
-async function fetchJourneyPage(username) {
-  const slug = String(username ?? '').trim()
-  if (!slug) {
-    return { parsed: null, error: null, notFound: true }
-  }
-
-  const { data, error } = await supabase.rpc('get_journey_page_data', {
-    p_username: slug,
-  })
-
-  if (error || !data) {
-    return { parsed: null, error: error ?? null, notFound: true }
-  }
-
-  const parsed = parseJourneyRpcResponse(data)
-  if (!parsed) {
-    return { parsed: null, error: null, notFound: true }
-  }
-
-  return { parsed, error: null, notFound: false }
-}
-
 async function fetchComments(profileUserId, limit, offset) {
   if (!isValidUuid(profileUserId)) return []
 
@@ -101,8 +51,7 @@ export default function Journey() {
 
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
-  const [loadError, setLoadError] = useState('')
-  const [payload, setPayload] = useState(null)
+  const [journeyData, setJourneyData] = useState(null)
   const [viewCount, setViewCount] = useState(0)
   const [comments, setComments] = useState([])
   const [commentsVisible, setCommentsVisible] = useState(COMMENTS_PAGE)
@@ -113,32 +62,32 @@ export default function Journey() {
   const [commentSuccess, setCommentSuccess] = useState('')
   const [commentCooldown, setCommentCooldown] = useState(false)
 
-  const profile = payload?.profile
+  const profile = journeyData?.profile
   const challengeType = profile?.challenge_type
   const displayName = formatJourneyDisplayName(profile?.username || username)
   const profileUserId = isValidUuid(profile?.user_id) ? profile.user_id : null
-  const books = payload?.books ?? []
-  const attempts = payload?.attempts ?? []
+  const books = journeyData?.books ?? []
+  const attempts = journeyData?.attempts ?? []
 
   const logsByDate = useMemo(
-    () => buildLogsByDate(payload?.logs ?? []),
-    [payload?.logs],
+    () => buildLogsByDate(journeyData?.logs ?? []),
+    [journeyData?.logs],
   )
 
-  const startDate = payload?.current_attempt?.start_date || profile?.start_date
-  const attemptNumber = payload?.current_attempt?.attempt_number ?? 1
+  const startDate = journeyData?.current_attempt?.start_date || profile?.start_date
+  const attemptNumber = journeyData?.current_attempt?.attempt_number ?? 1
   const dayNumber = currentChallengeDay(startDate, today)
 
   const grid = useMemo(() => {
-    if (payload?.grid?.length) return payload.grid
+    if (journeyData?.grid?.length) return journeyData.grid
     if (!startDate) return []
     return buildChallengeGrid(startDate, logsByDate, challengeType, today)
-  }, [payload?.grid, startDate, logsByDate, challengeType, today])
+  }, [journeyData?.grid, startDate, logsByDate, challengeType, today])
 
   const stats = useMemo(() => {
-    if (payload?.stats) return payload.stats
-    return computeJourneyStats(payload?.logs ?? [], challengeType)
-  }, [payload?.stats, payload?.logs, challengeType])
+    if (journeyData?.stats) return journeyData.stats
+    return computeJourneyStats(journeyData?.logs ?? [], challengeType)
+  }, [journeyData?.stats, journeyData?.logs, challengeType])
 
   const attemptTimeline = useMemo(
     () => buildAttemptTimeline(attempts, today),
@@ -153,40 +102,72 @@ export default function Journey() {
   }, [])
 
   useEffect(() => {
-    let cancelled = false
-    setLoading(true)
-    setNotFound(false)
-    setLoadError('')
+    const fetchData = async () => {
+      console.log('Fetching journey for username:', username)
 
-    ;(async () => {
+      const { data, error } = await supabase.rpc('get_journey_page_data', {
+        p_username: username,
+      })
+
+      console.log('RPC raw data:', data)
+      console.log('RPC data type:', typeof data)
+      console.log('RPC error:', error)
+
+      if (error) {
+        console.error('Supabase error:', error)
+        setNotFound(true)
+        setJourneyData(null)
+        setLoading(false)
+        return
+      }
+
+      if (!data) {
+        console.log('Data is null/undefined')
+        setNotFound(true)
+        setJourneyData(null)
+        setLoading(false)
+        return
+      }
+
       try {
-        const { parsed, error, notFound: journeyNotFound } = await fetchJourneyPage(username)
-        if (cancelled) return
-        if (journeyNotFound || error || !parsed?.profile) {
+        const parsed = typeof data === 'string' ? JSON.parse(data) : data
+        console.log('Parsed data:', parsed)
+        console.log('Profile:', parsed?.profile)
+
+        if (!parsed?.profile) {
+          console.log('No profile found in parsed data')
           setNotFound(true)
-          setPayload(null)
+          setJourneyData(null)
+          setLoading(false)
           return
         }
-        setPayload(parsed)
-        setViewCount(parsed.visitor_count ?? 0)
-        if (parsed.comments) {
+
+        setNotFound(false)
+        setJourneyData(parsed)
+        setViewCount(parsed.visitor_count ?? parsed.view_count ?? 0)
+        if (Array.isArray(parsed.comments)) {
           setComments(parsed.comments.slice(0, COMMENTS_PAGE))
           setHasMoreComments(parsed.comments.length > COMMENTS_PAGE)
         } else if (isValidUuid(parsed.profile.user_id)) {
           await loadComments(parsed.profile.user_id, COMMENTS_PAGE)
         }
-      } catch {
-        if (!cancelled) {
-          setNotFound(true)
-          setPayload(null)
-        }
+      } catch (e) {
+        console.error('Parse error:', e)
+        setNotFound(true)
+        setJourneyData(null)
       } finally {
-        if (!cancelled) setLoading(false)
+        setLoading(false)
       }
-    })()
+    }
 
-    return () => {
-      cancelled = true
+    if (username) {
+      setLoading(true)
+      setNotFound(false)
+      void fetchData()
+    } else {
+      setLoading(false)
+      setNotFound(true)
+      setJourneyData(null)
     }
   }, [username, loadComments])
 
@@ -284,13 +265,10 @@ export default function Journey() {
     )
   }
 
-  if (loadError || !profile) {
+  if (!journeyData?.profile) {
     return (
       <div className="journey-page">
-        <div className="journey-empty">
-          <h1>Something went wrong</h1>
-          <p>{loadError || 'Try again in a moment.'}</p>
-        </div>
+        <div className="journey-loading">Loading journey…</div>
       </div>
     )
   }
